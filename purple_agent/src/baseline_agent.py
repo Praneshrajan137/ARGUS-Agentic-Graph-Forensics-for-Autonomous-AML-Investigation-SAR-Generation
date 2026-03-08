@@ -325,7 +325,7 @@ class BaselinePurpleAgent:
             "findings": findings,
             "tool_calls_used": self.tool_calls,
             "identified_crimes": identified_crimes,
-            "suspicious_accounts": list(set(suspicious_accounts)),
+            "suspicious_accounts": sorted(set(suspicious_accounts)),
             "narrative": self._generate_narrative(findings)
         }
     

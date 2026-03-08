@@ -69,7 +69,7 @@ echo ""
 
 echo "Section 2: Dependencies"
 
-for pkg in networkx langgraph fastapi uvicorn httpx protobuf spacy pydantic openai; do
+for pkg in networkx langgraph fastapi uvicorn httpx google.protobuf spacy pydantic openai; do
     if python3 -c "import $pkg" 2>/dev/null; then
         check_pass "Package: $pkg"
     else
