@@ -41,6 +41,9 @@ from src.config import (
     EFFICIENCY_TIER_GOOD_MAX,
     EFFICIENCY_TIER_FAIR_MAX,
     SAR_FIVE_WS_PATTERN,
+    CTR_THRESHOLD_USD,
+    STRUCTURING_MIN_AMOUNT_USD,
+    STRUCTURING_MAX_AMOUNT_USD,
 )
 from src.core.result_types import (
     EntityMetrics,
@@ -1136,14 +1139,21 @@ def _compute_typology_score(
     primary = actual_crimes[0].get('crime_type', 'unknown')
     detected_primary = identified_crimes[0].get('crime_type', '') if identified_crimes else ''
 
-    correct = bool(expected_types & detected_types)
+    # Proportional scoring: F1 over crime type sets
+    tp = len(expected_types & detected_types)
+    fp = len(detected_types - expected_types)
+    fn = len(expected_types - detected_types)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    correct = f1 == 1.0  # Only fully correct if perfect F1
 
     return TypologyScore(
         expected_typology=primary,
         detected_typology=detected_primary,
         correct=correct,
-        confidence=Decimal("1") if correct else Decimal("0"),
-        reasoning=f"Expected {expected_types}, detected {detected_types}",
+        confidence=Decimal(str(round(f1, 4))),
+        reasoning=f"Expected {expected_types}, detected {detected_types}; F1={f1:.4f}",
     )
 
 
@@ -1191,8 +1201,13 @@ def _check_hallucinations(
             raw = match.group().replace('$', '').replace(',', '')
             try:
                 cited_amount = str(round(float(raw), 2))
-                # Allow threshold amounts ($10,000) -- they're definitional, not hallucinated
-                if cited_amount not in graph_amounts and float(cited_amount) not in (10000.0, 9000.0, 9800.0):
+                # Allow threshold amounts -- they're definitional, not hallucinated
+                threshold_whitelist = {
+                    float(CTR_THRESHOLD_USD),
+                    float(STRUCTURING_MIN_AMOUNT_USD),
+                    float(STRUCTURING_MAX_AMOUNT_USD),
+                }
+                if cited_amount not in graph_amounts and float(cited_amount) not in threshold_whitelist:
                     result.hallucinated_amounts.append(match.group())
             except ValueError:
                 pass

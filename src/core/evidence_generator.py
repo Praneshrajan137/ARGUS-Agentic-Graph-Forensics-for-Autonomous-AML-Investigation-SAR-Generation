@@ -17,6 +17,7 @@ v8.0: Decimal-everywhere for currency amounts. Dual-jurisdiction (FinCEN + FIU-I
 
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timedelta
+import zoneinfo
 from decimal import Decimal
 import random
 from faker import Faker
@@ -85,7 +86,6 @@ class EvidenceGenerator:
         """
         amount_str = _fmt_amount(total_amount, currency)
         file_number = f"SAR-{random.randint(100000, 999999)}"
-        date_filed = datetime.now().strftime('%Y-%m-%d')
 
         if currency == "INR":
             regulator = "FIU-IND"
@@ -97,6 +97,9 @@ class EvidenceGenerator:
             act_name = "Bank Secrecy Act"
             threshold_label = "$10,000 Currency Transaction Report (CTR) threshold"
             timezone = TIMEZONE_FINCEN
+
+        tz = zoneinfo.ZoneInfo(timezone)
+        date_filed = datetime.now(tz=tz).strftime('%Y-%m-%d')
 
         if crime_type == "structuring":
             narrative = f"""SUSPICIOUS ACTIVITY REPORT
@@ -155,8 +158,8 @@ RECOMMENDATION: Immediate investigation and possible law enforcement referral.""
             "file_number": file_number,
             "subject_id": subject_id,
             "subject_name": subject_name,
-            "date_filed": datetime.now().isoformat(),
-            "date": datetime.now().isoformat(),
+            "date_filed": datetime.now(tz=tz).isoformat(),
+            "date": datetime.now(tz=tz).isoformat(),
             "narrative": narrative.strip(),
             "body": narrative.strip(),
             "crime_type": crime_type,

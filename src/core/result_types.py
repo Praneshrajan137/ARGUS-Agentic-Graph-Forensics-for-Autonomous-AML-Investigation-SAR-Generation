@@ -126,8 +126,8 @@ class TypologyScore:
 
     @property
     def score(self) -> Decimal:
-        """1.0 if correct, 0.0 if wrong."""
-        return Decimal("1") if self.correct else Decimal("0")
+        """Proportional score based on typology detection coverage (F1)."""
+        return self.confidence
 
 
 # ═══════════════════════════════════════════════════════════════════
