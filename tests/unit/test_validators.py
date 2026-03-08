@@ -298,6 +298,23 @@ class TestValidateLayeringPattern:
         is_valid, errors = validate_layering_pattern(G, chain_edges)
         
         assert is_valid is True
+        assert len(errors) == 0
+
+    def test_multiple_start_nodes_fails(self):
+        """Test that a chain with multiple start nodes (fan-in) fails validation.
+
+        Covers validators.py line 185: len(starts) != 1 branch.
+        A valid layering chain must have exactly one start node (in_degree=0).
+        """
+        G = nx.DiGraph()
+        # Two source nodes feeding into a common target — two start nodes
+        G.add_edges_from([(1, 3), (2, 3), (3, 4)])
+        chain_edges = [(1, 3), (2, 3), (3, 4)]
+
+        is_valid, errors = validate_layering_pattern(G, chain_edges)
+
+        assert is_valid is False
+        assert any("start node" in err.lower() for err in errors)
 
 
 # =============================================================================
