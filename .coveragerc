@@ -1,0 +1,9 @@
+# Coverage.py configuration
+# Exclude auto-generated and optional-dependency files from coverage metrics
+
+[run]
+omit =
+    # Auto-generated protobuf bindings (machine-generated, not hand-written)
+    src/core/*_pb2.py
+    # SDV models -- optional dependency, falls back to random generation
+    src/core/sdv_models.py
