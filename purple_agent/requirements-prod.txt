@@ -32,5 +32,8 @@ spacy==3.8.4
 # Environment
 python-dotenv==1.0.1
 
+# Timezone data (required on Windows for ZoneInfo)
+tzdata==2025.2
+
 # Utilities
 pydantic==2.10.5

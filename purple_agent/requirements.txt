@@ -38,5 +38,8 @@ pytest==8.3.4
 pytest-asyncio==0.25.0
 pytest-cov==6.0.0
 
+# Timezone data (required on Windows for ZoneInfo)
+tzdata==2025.2
+
 # Utilities
 pydantic==2.10.5

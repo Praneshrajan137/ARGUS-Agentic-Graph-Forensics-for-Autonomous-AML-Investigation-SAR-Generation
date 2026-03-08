@@ -10,5 +10,6 @@ build/
 htmlcov/
 state/
 *.log
+.venv/
 # NOTE: protos/*_pb2.py is NOT gitignored. Generated bindings must be committed
 # so that git clone followed by pytest works immediately without a build step.
