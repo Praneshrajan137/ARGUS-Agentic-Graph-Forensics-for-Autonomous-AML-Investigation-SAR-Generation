@@ -1,0 +1,194 @@
+{
+  "version": "7.0.0",
+  "total_tasks": 20,
+  "tasks": [
+    {
+      "id": "A1",
+      "name": "Repository Scaffold",
+      "phase": "A",
+      "dependencies": [],
+      "status": "complete"
+    },
+    {
+      "id": "A2",
+      "name": "Agent Card Schema",
+      "phase": "A",
+      "dependencies": [
+        "A1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A3",
+      "name": "Protobuf Schema & Bindings",
+      "phase": "A",
+      "dependencies": [
+        "A1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A4",
+      "name": "A2A Client",
+      "phase": "A",
+      "dependencies": [
+        "A3"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A5",
+      "name": "Dockerfile + TCMalloc",
+      "phase": "A",
+      "dependencies": [
+        "A3"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A6",
+      "name": "Ralph Wiggum Loop",
+      "phase": "A",
+      "dependencies": [
+        "A1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A7",
+      "name": "LangGraph Decision Loop",
+      "phase": "A",
+      "dependencies": [
+        "A1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "A8",
+      "name": "A2A Server (FastAPI)",
+      "phase": "A",
+      "dependencies": [
+        "A4",
+        "A7"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "B1",
+      "name": "Graph Reasoner Core",
+      "phase": "B",
+      "dependencies": [
+        "A3",
+        "A4"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "B2",
+      "name": "Structuring Detection",
+      "phase": "B",
+      "dependencies": [
+        "B1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "B3",
+      "name": "Layering Detection",
+      "phase": "B",
+      "dependencies": [
+        "B1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "B4",
+      "name": "Evidence Synthesizer",
+      "phase": "B",
+      "dependencies": [
+        "B1"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "C1",
+      "name": "SAR Drafter",
+      "phase": "C",
+      "dependencies": [
+        "B2",
+        "B3",
+        "B4"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "C2",
+      "name": "Full Pipeline Wiring",
+      "phase": "C",
+      "dependencies": [
+        "C1",
+        "A7",
+        "A8"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "C3",
+      "name": "Integration Tests",
+      "phase": "C",
+      "dependencies": [
+        "C2"
+      ],
+      "status": "complete"
+    },
+    {
+      "id": "D1",
+      "name": "Documentation Suite",
+      "phase": "D",
+      "dependencies": [
+        "C3"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "D2",
+      "name": "Docker Production Hardening",
+      "phase": "D",
+      "dependencies": [
+        "A5",
+        "C3"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "D3",
+      "name": "Determinism & Security Verification",
+      "phase": "D",
+      "dependencies": [
+        "C3"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "D4",
+      "name": "Pre-flight & Performance Baseline",
+      "phase": "D",
+      "dependencies": [
+        "C3"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "D5",
+      "name": "Operational Readiness Gate",
+      "phase": "D",
+      "dependencies": [
+        "D1",
+        "D2",
+        "D3",
+        "D4"
+      ],
+      "status": "pending"
+    }
+  ]
+}

@@ -105,11 +105,11 @@ stateDiagram-v2
     detect_layering --> synthesize_evidence
     synthesize_evidence --> compute_confidence
     compute_confidence --> draft_sar: score >= CONFIDENCE_THRESHOLD
-    compute_confidence --> submit_result: LOW_CONFIDENCE (skip SAR)
+    compute_confidence --> submit: LOW_CONFIDENCE (skip SAR)
     draft_sar --> validate_sar
     validate_sar --> draft_sar: retry (count < SAR_MAX_RETRY)
-    validate_sar --> submit_result: passed OR retries exhausted (mechanical SAR)
-    submit_result --> [*]
+    validate_sar --> submit: passed OR retries exhausted (mechanical SAR)
+    submit --> [*]
 ```
 
 **Node descriptions:**
@@ -123,13 +123,13 @@ stateDiagram-v2
 | `compute_confidence` | Score computation BEFORE SAR generation; gate on threshold |
 | `draft_sar` | LLM Five Ws narrative with prompt injection sanitization |
 | `validate_sar` | Verify every cited entity/amount/timestamp exists in graph |
-| `submit_result` | A2A submission with idempotency key and custom JSON encoder |
+| `submit` | A2A submission with idempotency key and custom JSON encoder |
 
 **Conditional edges:**
 
-- `compute_confidence` --> `submit_result`: When `confidence_score < CONFIDENCE_THRESHOLD` (default 0.5), set typology to `NONE`, skip SAR, return `LOW_CONFIDENCE` result.
+- `compute_confidence` --> `submit`: When `confidence_score < CONFIDENCE_THRESHOLD` (default 0.5), set typology to `NONE`, skip SAR, return `LOW_CONFIDENCE` result.
 - `validate_sar` --> `draft_sar`: When validation fails and `retry_count < SAR_MAX_RETRY`, retry.
-- `validate_sar` --> `submit_result`: When validation passes, OR when `retry_count >= SAR_MAX_RETRY` (generate mechanical SAR from f-string template -- NEVER submit empty/malformed SAR).
+- `validate_sar` --> `submit`: When validation passes, OR when `retry_count >= SAR_MAX_RETRY` (generate mechanical SAR from f-string template -- NEVER submit empty/malformed SAR).
 
 ---
 
@@ -253,12 +253,13 @@ class InvestigationState(TypedDict):
     detected_typology: str | None        # STRUCTURING | LAYERING | BOTH | NONE
     detection_results: dict | None       # Aggregated detection output
     evidence_package: dict | None        # Synthesized evidence
-    sar_narrative: str                   # Five Ws narrative text
+    sar_narrative: str | None             # Five Ws narrative text (None until drafted, reset to None on validation retry)
     sar_draft: dict | None               # Serialized SARDraft
     validation_result: dict | None       # SAR validation outcome
     typology_detected: str               # Final typology string
     involved_entities: list[str]         # ALL detected criminal nodes (SORTED)
     confidence_score: float              # Computed in step 6 (float, NOT Decimal)
+    investigation_start_timestamp: int    # Set in ingest: int(time.time())
     investigation_timestamp: int         # Set at submit: int(time.time())
     retry_count: int                     # SAR validation retry counter
     status: str                          # "PENDING" | "IN_PROGRESS" | "COMPLETE" | "FAILED"
@@ -269,8 +270,7 @@ class InvestigationState(TypedDict):
 
 ## 6. File Structure
 
-Files marked with **[EXISTS]** are present in the repository. Files marked with
-**[TARGET]** are specified by the architecture but not yet created.
+All files are present in the repository and marked **[EXISTS]**.
 
 ```
 purple_agent/
@@ -281,18 +281,18 @@ purple_agent/
 +-- requirements.txt              [EXISTS]  Pinned deps (NO >= ranges)
 +-- pyproject.toml                [EXISTS]  pytest: asyncio_mode=auto, pythonpath=["."]
 +-- ralph.sh                      [EXISTS]  Die-and-restart loop (NO set -e)
-+-- prompt.md                     [TARGET]  LLM system prompt for SAR generation
-+-- README.md                     [TARGET]  Project overview and quick start
++-- prompt.md                     [EXISTS]  LLM system prompt for SAR generation
++-- README.md                     [EXISTS]  Project overview and quick start
 +-- ARCHITECTURE.md               [EXISTS]  This document
 +-- .env.example                  [EXISTS]  All env vars with PYTHONHASHSEED=0
 +-- .gitignore                    [EXISTS]  Does NOT exclude protos/*_pb2.py
 +-- protos/
 |   +-- __init__.py               [EXISTS]  Package marker (BUG-02 fix)
 |   +-- financial_crime.proto     [EXISTS]  7 message types (FROZEN -- shared with Green)
-|   +-- financial_crime_pb2.py    [TARGET]  Generated bindings (committed, not gitignored)
+|   +-- financial_crime_pb2.py    [EXISTS]  Generated bindings (committed, not gitignored)
 +-- plans/
-|   +-- prd.json                  [TARGET]  20 tasks with dependencies (A1-D5)
-+-- progress.txt                  [TARGET]  Ralph Wiggum iteration log
+|   +-- prd.json                  [EXISTS]  20 tasks with dependencies (A1-D5)
++-- progress.txt                  [EXISTS]  Ralph Wiggum iteration log
 +-- scripts/
 |   +-- preflight.sh              [EXISTS]  Pre-deployment validation (chmod +x)
 +-- src/
@@ -300,36 +300,36 @@ purple_agent/
 |   +-- main.py                   [EXISTS]  Entry: load_dotenv -> RedactingFormatter -> uvicorn
 |   +-- config.py                 [EXISTS]  SINGLE SOURCE OF TRUTH for all constants
 |   +-- baseline_agent.py         [EXISTS]  Minimal viable baseline investigator
-|   +-- ralph_runner.py           [TARGET]  Per-iteration task executor
+|   +-- ralph_runner.py           [EXISTS]  Per-iteration task executor
 |   +-- core/
 |       +-- __init__.py           [EXISTS]  Package marker
-|       +-- a2a_client.py         [TARGET]  httpx + circuit breaker + retry + protobuf
-|       +-- a2a_server.py         [TARGET]  FastAPI endpoints (/a2a, /health)
-|       +-- decision_loop.py      [TARGET]  LangGraph state machine (8 nodes)
-|       +-- graph_reasoner.py     [TARGET]  MultiDiGraph + BFS + iterative DFS
-|       +-- evidence_synthesizer.py [TARGET] spaCy NER + regex
-|       +-- sar_drafter.py        [TARGET]  LLM Five Ws + mechanical fallback
+|       +-- a2a_client.py         [EXISTS]  httpx + circuit breaker + retry + protobuf
+|       +-- a2a_server.py         [EXISTS]  FastAPI endpoints (/a2a, /health)
+|       +-- decision_loop.py      [EXISTS]  LangGraph state machine (8 nodes)
+|       +-- graph_reasoner.py     [EXISTS]  MultiDiGraph + BFS + iterative DFS
+|       +-- evidence_synthesizer.py [EXISTS] spaCy NER + regex
+|       +-- sar_drafter.py        [EXISTS]  LLM Five Ws + mechanical fallback
 |       +-- heuristics/
-|           +-- __init__.py       [TARGET]  Package marker
-|           +-- structuring.py    [TARGET]  Fan-in BFS detection
-|           +-- layering.py       [TARGET]  Chain DFS with decay analysis
+|           +-- __init__.py       [EXISTS]  Package marker
+|           +-- structuring.py    [EXISTS]  Fan-in BFS detection
+|           +-- layering.py       [EXISTS]  Chain DFS with decay analysis
 +-- tests/
     +-- __init__.py               [EXISTS]  Package marker
-    +-- conftest.py               [TARGET]  16 shared fixtures (ground truth data)
-    +-- test_agent_card_schema.py  [TARGET]
-    +-- test_protobuf_serialization.py [TARGET]
-    +-- test_a2a_client.py        [TARGET]  27 tests
-    +-- test_a2a_server.py        [TARGET]
-    +-- test_graph_reasoner_core.py [TARGET]
-    +-- test_structuring_detection.py [TARGET]
-    +-- test_layering_detection.py [TARGET]
-    +-- test_evidence_synthesizer.py [TARGET]
-    +-- test_sar_drafter.py       [TARGET]
-    +-- test_decision_loop.py     [TARGET]
+    +-- conftest.py               [EXISTS]  16 shared fixtures (ground truth data)
+    +-- test_agent_card_schema.py  [EXISTS]
+    +-- test_protobuf_schema.py       [EXISTS]
+    +-- test_a2a_client.py        [EXISTS]  27 tests
+    +-- test_a2a_server.py        [EXISTS]
+    +-- test_graph_reasoner_core.py [EXISTS]
+    +-- test_structuring_detection.py [EXISTS]
+    +-- test_layering_detection.py [EXISTS]
+    +-- test_evidence_synthesizer.py [EXISTS]
+    +-- test_sar_drafter.py       [EXISTS]
+    +-- test_decision_loop.py     [EXISTS]
     +-- integration/
-        +-- __init__.py           [TARGET]
-        +-- test_full_pipeline.py [TARGET]
-        +-- test_zero_failure.py  [TARGET]
+        +-- __init__.py           [EXISTS]
+        +-- test_full_pipeline.py [EXISTS]
+        +-- test_zero_failure.py  [EXISTS]
 ```
 
 ---
@@ -821,6 +821,8 @@ Exception
 > **Note:** The current `Dockerfile` uses `python:3.10-slim` and targets the
 > baseline agent. It requires upgrade to match the spec above (Python 3.11+,
 > TCMalloc, non-root user, `PYTHONHASHSEED=0`, spaCy model download).
+>
+> NOTE: This note will be removed by D5 after D2 upgrades the Dockerfile.
 
 ### ralph.sh (Entrypoint)
 
