@@ -1,0 +1,56 @@
+# ═══════════════════════════════════════════════════════════════
+# Purple Agent — Docker Compose (Development / Staging)
+# Usage: docker compose up --build
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  purple-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - PYTHONHASHSEED=0
+      - GREEN_AGENT_URL=http://green-agent:9090
+      - LOG_LEVEL=INFO
+      - LOG_JSON_FORMAT=true
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "1.5"
+        reservations:
+          memory: 512m
+          cpus: "0.5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Green Agent — upstream data source
+  # Uncomment and configure when Green Agent image is available
+  # green-agent:
+  #   image: green-agent:latest
+  #   ports:
+  #     - "9090:9090"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 1g
+  #         cpus: "1.0"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3

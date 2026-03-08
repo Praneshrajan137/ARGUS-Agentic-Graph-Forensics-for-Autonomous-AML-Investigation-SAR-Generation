@@ -8,6 +8,15 @@
 # ═══════════════════════════════════════════════════════════════════
 set -uo pipefail
 
+# Source TCMalloc environment (set at Docker build time)
+# Works on both amd64 and arm64 without hardcoded paths
+if [ -f /etc/tcmalloc.env ]; then
+    . /etc/tcmalloc.env
+    if [ -n "${TCMALLOC_PATH:-}" ]; then
+        export LD_PRELOAD="$TCMALLOC_PATH"
+    fi
+fi
+
 # Navigate to PROJECT ROOT (parent of scripts/).
 # ralph.sh lives in scripts/. "$(dirname "$0")" resolves to "scripts".
 cd "$(dirname "$0")/.."

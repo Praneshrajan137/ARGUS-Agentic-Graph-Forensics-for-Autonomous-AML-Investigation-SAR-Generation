@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════════════════
+# Purple Agent -- Production Dependencies v7.0
+# Python 3.11+
+#
+# STRICT SUBSET of requirements.txt. Same pinned versions.
+# Excludes: pytest, pytest-asyncio, pytest-cov (test), grpcio-tools (build).
+# ═══════════════════════════════════════════════════════════════════
+
+# Graph Engine
+networkx==3.2.1
+
+# Agentic Orchestration
+langgraph==0.2.60
+langchain-core==0.3.30
+
+# LLM Client
+openai==1.59.9
+
+# HTTP Client (async)
+httpx==0.27.2
+
+# Protobuf
+protobuf==5.29.3
+
+# A2A Server
+fastapi==0.115.6
+uvicorn==0.34.0
+
+# NLP -- spaCy NER
+spacy==3.8.4
+
+# Environment
+python-dotenv==1.0.1
+
+# Utilities
+pydantic==2.10.5

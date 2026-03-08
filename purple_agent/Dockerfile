@@ -1,46 +1,97 @@
 # ═══════════════════════════════════════════════════════════════════
-# Purple Agent -- Project Gamma | Dockerfile v12.0
-# The Panopticon Protocol: Zero-Failure Financial Crime Detection
-#
+# Purple Agent — The Panopticon Protocol
+# Production Image: Multi-arch | Python 3.11 | TCMalloc | Non-root
 # Build: docker build -t purple-agent .
-# Run:   docker run -p 8080:8080 purple-agent
+# Run:   docker run -p 8080:8080 --env-file .env purple-agent
 # ═══════════════════════════════════════════════════════════════════
 
-FROM python:3.11-slim-bookworm
+# --- Stage 1: Builder -------------------------------------------
+# Installs all dependencies and downloads spaCy model.
+# Only site-packages and binaries are carried to the runtime stage.
+FROM python:3.11-slim AS builder
 
-# Determinism: fixed hash seed for dict/set iteration order
-ENV PYTHONHASHSEED=0
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# TCMalloc for high-performance memory management
-# x86_64 only (primary target). ARM64: /usr/lib/aarch64-linux-gnu/...
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libtcmalloc-minimal4 && \
+    apt-get install -y --no-install-recommends \
+        libgoogle-perftools-dev && \
     rm -rf /var/lib/apt/lists/*
 
-ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4
+WORKDIR /build
+
+# Install production dependencies only (slimmer image)
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements-prod.txt
+
+# Download spaCy model into the install prefix
+# [MED-07] v3.0: stderr is NOT suppressed — build failures must be visible
+RUN PYTHONPATH=/install/lib/python3.11/site-packages \
+    /install/bin/python -m spacy download en_core_web_sm || \
+    pip install --no-cache-dir --prefix=/install en_core_web_sm
+
+# --- Stage 2: Runtime -------------------------------------------
+FROM python:3.11-slim
+
+# Install TCMalloc runtime library (available on both amd64 and arm64)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libtcmalloc-minimal4 && \
+    rm -rf /var/lib/apt/lists/*
+
+# [CRIT-02] Detect TCMalloc library path at build time.
+# This works on both amd64 (/usr/lib/x86_64-linux-gnu/) and
+# arm64 (/usr/lib/aarch64-linux-gnu/) without hardcoding.
+RUN TCMALLOC_PATH=$(find /usr/lib -name "libtcmalloc_minimal.so.4" 2>/dev/null | head -1) && \
+    if [ -n "$TCMALLOC_PATH" ]; then \
+        echo "TCMALLOC_PATH=$TCMALLOC_PATH" > /etc/tcmalloc.env; \
+        echo "Detected TCMalloc at: $TCMALLOC_PATH"; \
+    else \
+        echo "WARNING: TCMalloc not found, proceeding without it"; \
+        echo "TCMALLOC_PATH=" > /etc/tcmalloc.env; \
+    fi
+
+# Create non-root user (UID 1000 — standard convention)
+RUN groupadd --gid 1000 agent && \
+    useradd --uid 1000 --gid agent --shell /bin/bash --create-home agent
 
 WORKDIR /app
 
-# Layer-cached dependency install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy installed Python packages from builder
+# [CRIT-01] This single COPY carries ALL packages INCLUDING the spaCy
+# model and its dist-info metadata. No separate model copy needed.
+COPY --from=builder /install/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /install/bin /usr/local/bin
 
-# Download spaCy model at build time (66MB)
-RUN python -m spacy download en_core_web_sm
+# Copy application code (respects .dockerignore)
+# [MED-06] v3.0: --chown in COPY eliminates redundant chown -R layer
+COPY --chown=agent:agent . .
 
-# Copy application code (after deps for cache)
-COPY . .
+# Environment: determinism + performance + logging
+ENV PYTHONHASHSEED=0 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Non-root user for security
-RUN useradd --create-home --shell /bin/bash purple && \
-    chown -R purple:purple /app
-USER purple
+# [HIGH-07] v3.0: LD_PRELOAD is set by ralph.sh sourcing /etc/tcmalloc.env
+# at runtime (D2-E). Docker containers do NOT read /etc/environment.
+# For non-ralph.sh invocations (e.g., docker run --entrypoint python),
+# pass --env LD_PRELOAD=<path> explicitly.
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8080/health').raise_for_status()"
+# Make entrypoint executable
+RUN chmod +x ralph.sh && \
+    chmod +x scripts/preflight.sh 2>/dev/null || true
 
+# Switch to non-root user
+USER agent
+
+# Expose A2A server port
 EXPOSE 8080
 
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Health check: lightweight Python probe
+# Interval: 30s, Timeout: 5s, Retries: 3, Start period: 10s
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+# Graceful shutdown: SIGTERM propagates through ralph.sh to Python
+# [HIGH-04] Explicit STOPSIGNAL ensures Docker sends SIGTERM (not SIGKILL)
+STOPSIGNAL SIGTERM
+
+# Entrypoint: ralph.sh die-and-restart supervision loop
+ENTRYPOINT ["./ralph.sh"]

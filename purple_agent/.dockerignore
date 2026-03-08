@@ -1,21 +1,44 @@
 # ═══════════════════════════════════════════════════════════════════
-# Docker Build Ignore -- Purple Agent v7.0
-# Keeps Docker image lean by excluding dev/test artifacts.
+# Purple Agent — Docker Build Context Exclusions
 # ═══════════════════════════════════════════════════════════════════
+
+# Version control
 .git
-.env
-.env.example
-.pytest_cache
-.mypy_cache
-__pycache__
-*.pyc
-htmlcov/
-.coverage
-state/
+.gitignore
+
+# Tests (not needed in production image)
 tests/
+
+# Scripts (preflight runs outside container)
+# NOTE: ralph.sh is NOT excluded — it's the entrypoint
 scripts/
+
+# Environment files (secrets — pass via --env-file at runtime)
+.env
+.env.*
+
+# Documentation (not needed at runtime)
 *.md
-*.txt
-!requirements.txt
-!progress.txt
-*.log
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# IDE artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker-in-docker prevention
+Dockerfile
+Dockerfile.*
+docker-compose*.yml

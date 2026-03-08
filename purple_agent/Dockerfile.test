@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════════
+# Purple Agent — Test Runner Image
+# Extends production image with test dependencies and test files.
+# Usage: docker build -f Dockerfile.test -t purple-agent-test .
+#        docker run --rm purple-agent-test
+# ═══════════════════════════════════════════════════════════════
+
+FROM purple-agent:latest
+
+USER root
+
+# Install test dependencies
+RUN pip install --no-cache-dir pytest==8.3.4 pytest-asyncio==0.25.0 pytest-cov==6.0.0
+
+# Copy test files and config
+COPY tests/ /app/tests/
+COPY pyproject.toml /app/pyproject.toml
+
+# Ensure correct ownership
+RUN chown -R agent:agent /app/tests /app/pyproject.toml
+
+USER agent
+
+ENV PYTHONHASHSEED=0
+
+CMD ["python", "-m", "pytest", "-p", "no:randomly", "-v", "--tb=short", "--cov=src", "--cov-report=term-missing"]
