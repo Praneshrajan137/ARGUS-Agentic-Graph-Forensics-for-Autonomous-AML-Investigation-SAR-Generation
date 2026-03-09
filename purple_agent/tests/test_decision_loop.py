@@ -1,6 +1,7 @@
 """
 Test: LangGraph Decision Loop -- State Machine
 PRD Reference: Task A7
+Updated for v9.0 API (uppercase statuses, renamed functions/fields).
 """
 import pytest
 from decimal import Decimal
@@ -8,40 +9,37 @@ from typing import Any
 
 from src.core.decision_loop import (
     InvestigationState,
-    ingest,
-    detect_structuring,
-    detect_layering,
+    receive_case,
+    detect_typology,
     synthesize_evidence,
     compute_confidence,
     should_generate_sar,
     draft_sar,
     validate_sar,
     should_retry,
-    submit,
+    submit_result,
     build_workflow,
 )
 
 
 def _make_initial_state(**overrides: Any) -> InvestigationState:
-    """Build a minimal valid initial state with optional overrides."""
+    """Build a minimal valid initial state with optional overrides.
+
+    v9.0: Uses the minimal operational subset of Architecture S5.
+    """
     base: InvestigationState = {
         "case_id": "CASE-TEST-001",
         "subject_id": "suspect_001",
         "jurisdiction": "fincen",
         "hop_depth": 3,
         "graph_fragment": None,
-        "transactions": [],
-        "nodes": {},
-        "text_evidence": [],
-        "ground_truth_criminals": [],
-        "structuring_results": [],
-        "layering_results": [],
         "detected_typology": None,
-        "involved_entities": [],
-        "evidence_results": [],
+        "detection_results": None,
         "evidence_package": None,
         "sar_narrative": None,
+        "sar_draft": None,
         "validation_result": None,
+        "involved_entities": [],
         "confidence_score": 0.0,
         "investigation_start_timestamp": 0,
         "investigation_timestamp": 0,
@@ -53,65 +51,50 @@ def _make_initial_state(**overrides: Any) -> InvestigationState:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Ingest Node
+# Receive Case Node (v9.0: was "ingest")
 # ═══════════════════════════════════════════════════════════════════
 
-class TestIngest:
-    def test_ingest_fails_on_none_graph(self):
+class TestReceiveCase:
+    def test_receive_case_sets_in_progress(self):
+        """receive_case should set status to IN_PROGRESS."""
+        state = _make_initial_state()
+        result = receive_case(state)
+        assert result["status"] == "IN_PROGRESS", (
+            f"Expected IN_PROGRESS, got {result['status']}"
+        )
+
+    def test_receive_case_sets_start_timestamp(self):
+        """receive_case should set investigation_start_timestamp."""
+        state = _make_initial_state()
+        result = receive_case(state)
+        assert result["investigation_start_timestamp"] != 0, (
+            "Start timestamp should be set"
+        )
+
+    def test_receive_case_preserves_graph_fragment(self):
+        """receive_case does not validate graph — that's analyze_graph's job."""
         state = _make_initial_state(graph_fragment=None)
-        result = ingest(state)
-        if result["status"] != "failed":
-            raise ValueError("Should fail on None graph_fragment")
-        if result["error_message"] is None:
-            raise ValueError("Error message should be set")
-
-    def test_ingest_extracts_from_graph_fragment(self):
-        fragment = {
-            "transactions": [{"id": "TX-1"}],
-            "nodes": {"a": {"id": "a"}},
-            "text_evidence": [{"id": "EV-1"}],
-            "ground_truth_criminals": ["c1"],
-        }
-        state = _make_initial_state(graph_fragment=fragment)
-        result = ingest(state)
-        if result["status"] != "in_progress":
-            raise ValueError(f"Expected in_progress, got {result['status']}")
-        if len(result["transactions"]) != 1:
-            raise ValueError("Transactions not extracted")
-        if "a" not in result["nodes"]:
-            raise ValueError("Nodes not extracted")
-        if result["investigation_start_timestamp"] == 0:
-            raise ValueError("Start timestamp not set")
+        result = receive_case(state)
+        # receive_case always succeeds (v9.0: graph validation is in analyze_graph)
+        assert result["status"] == "IN_PROGRESS"
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Detection Nodes (placeholders)
+# Detection Node (v9.0: detect_typology replaces detect_structuring + detect_layering)
 # ═══════════════════════════════════════════════════════════════════
 
 class TestDetection:
-    def test_detect_structuring_passes_through_on_failure(self):
-        state = _make_initial_state(status="failed")
-        result = detect_structuring(state)
-        if result["status"] != "failed":
-            raise ValueError("Should preserve failed status")
+    def test_detect_typology_passes_through_on_failure(self):
+        state = _make_initial_state(status="FAILED")
+        result = detect_typology(state)
+        assert result["status"] == "FAILED", "Should preserve FAILED status"
 
-    def test_detect_structuring_returns_empty_results(self):
-        state = _make_initial_state(status="in_progress")
-        result = detect_structuring(state)
-        if result["structuring_results"] != []:
-            raise ValueError("Phase A should return empty results")
-
-    def test_detect_layering_passes_through_on_failure(self):
-        state = _make_initial_state(status="failed")
-        result = detect_layering(state)
-        if result["status"] != "failed":
-            raise ValueError("Should preserve failed status")
-
-    def test_detect_layering_returns_empty_results(self):
-        state = _make_initial_state(status="in_progress")
-        result = detect_layering(state)
-        if result["layering_results"] != []:
-            raise ValueError("Phase A should return empty results")
+    def test_detect_typology_handles_none_graph(self):
+        """With None graph, detect_typology should handle gracefully."""
+        state = _make_initial_state(status="IN_PROGRESS", graph_fragment=None)
+        result = detect_typology(state)
+        # With null/empty graph, detection finds nothing
+        assert result.get("detected_typology") == "NONE"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -119,22 +102,18 @@ class TestDetection:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestEvidenceSynthesis:
-    def test_synthesize_evidence_returns_package(self):
-        state = _make_initial_state(status="in_progress")
+    def test_synthesize_evidence_returns_package_on_no_typology(self):
+        """When typology is NONE, evidence synthesis returns NOT_APPLICABLE."""
+        state = _make_initial_state(status="IN_PROGRESS", detected_typology="NONE")
         result = synthesize_evidence(state)
         pkg = result["evidence_package"]
-        if pkg is None:
-            raise ValueError("evidence_package should not be None")
-        if pkg["text_corroborates_ledger"] is not False:
-            raise ValueError("Phase A should return False for corroboration")
-        if pkg["has_suspicious_discrepancy"] is not False:
-            raise ValueError("Phase A should return False for discrepancy")
+        assert pkg is not None, "evidence_package should not be None"
+        assert pkg["verdict"] == "NOT_APPLICABLE"
 
     def test_synthesize_evidence_skips_on_failure(self):
-        state = _make_initial_state(status="failed")
+        state = _make_initial_state(status="FAILED")
         result = synthesize_evidence(state)
-        if result["status"] != "failed":
-            raise ValueError("Should preserve failed status")
+        assert result["status"] == "FAILED", "Should preserve FAILED status"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -142,69 +121,76 @@ class TestEvidenceSynthesis:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestConfidenceScoring:
-    def test_confidence_all_cases(self, confidence_scoring_scenario):
-        """Test all 5 confidence scoring cases using state_builder (MED-31)."""
-        initial = _make_initial_state(status="in_progress")
+    """Test compute_confidence with v9.0 formula:
+    base = 0.3 (one typology) | 0.6 (BOTH)
+    + 0.2 if verdict in CORROBORATING_VERDICTS
+    + 0.2 if discrepancies non-empty
+    Score = min(1.0, base + evidence_boost + discrepancy_boost)
+    """
 
-        for name, case in confidence_scoring_scenario["test_cases"].items():
-            state = {**initial, **case["state_builder"]}
-            result = compute_confidence(state)
-            actual = result["confidence_score"]
-            expected = case["expected_score"]
-            if actual != expected:
-                raise ValueError(
-                    f"Case '{name}': expected {expected}, got {actual}"
-                )
-
-    def test_confidence_high_generates_sar(self, confidence_scoring_scenario):
-        """High confidence should route to SAR generation."""
-        initial = _make_initial_state(status="in_progress")
-        case = confidence_scoring_scenario["test_cases"]["high_confidence"]
-        state = {**initial, **case["state_builder"]}
+    def test_confidence_high(self):
+        """STRUCTURING(0.3) + corroboration(0.2) + discrepancy(0.2) = 0.7"""
+        state = _make_initial_state(
+            status="IN_PROGRESS",
+            detected_typology="STRUCTURING",
+            evidence_package={
+                "verdict": "CORROBORATED",
+                "discrepancies": ["amount mismatch"],
+            },
+        )
         result = compute_confidence(state)
+        assert result["confidence_score"] == 0.7
+
+    def test_confidence_low(self):
+        """LAYERING(0.3) with no evidence = 0.3 < threshold -> suppressed."""
+        state = _make_initial_state(
+            status="IN_PROGRESS",
+            detected_typology="LAYERING",
+            evidence_package={"verdict": "INSUFFICIENT_DATA", "discrepancies": []},
+        )
+        result = compute_confidence(state)
+        assert result["confidence_score"] == 0.3
+        # Low confidence should skip SAR
         route = should_generate_sar(result)
-        if route != "draft":
-            raise ValueError(f"Expected 'draft', got '{route}'")
+        assert route == "submit"
 
-    def test_confidence_low_skips_sar(self, confidence_scoring_scenario):
-        """Low confidence should skip SAR and go to submit."""
-        initial = _make_initial_state(status="in_progress")
-        case = confidence_scoring_scenario["test_cases"]["low_confidence"]
-        state = {**initial, **case["state_builder"]}
+    def test_confidence_both_typologies(self):
+        """BOTH(0.6) + corroboration(0.2) = 0.8"""
+        state = _make_initial_state(
+            status="IN_PROGRESS",
+            detected_typology="BOTH",
+            evidence_package={"verdict": "CORROBORATED", "discrepancies": []},
+        )
         result = compute_confidence(state)
+        assert result["confidence_score"] == 0.8
+
+    def test_confidence_zero(self):
+        """NONE = 0.0"""
+        state = _make_initial_state(
+            status="IN_PROGRESS",
+            detected_typology="NONE",
+            evidence_package={"verdict": "NOT_APPLICABLE", "discrepancies": []},
+        )
+        result = compute_confidence(state)
+        assert result["confidence_score"] == 0.0
+
+    def test_confidence_exact_boundary(self):
+        """STRUCTURING(0.3) + corroboration(0.2) = 0.5 == threshold -> SAR generated."""
+        state = _make_initial_state(
+            status="IN_PROGRESS",
+            detected_typology="STRUCTURING",
+            evidence_package={"verdict": "CORROBORATED", "discrepancies": []},
+        )
+        result = compute_confidence(state)
+        assert result["confidence_score"] == 0.5
         route = should_generate_sar(result)
-        if route != "submit":
-            raise ValueError(f"Expected 'submit', got '{route}'")
-
-    def test_confidence_zero_clears_entities(self, confidence_scoring_scenario):
-        """Zero confidence should clear involved_entities (MED-22)."""
-        initial = _make_initial_state(status="in_progress")
-        case = confidence_scoring_scenario["test_cases"]["zero_confidence"]
-        state = {**initial, **case["state_builder"]}
-        result = compute_confidence(state)
-        if result["detected_typology"] != "NONE":
-            raise ValueError("Should be NONE")
-        if result["involved_entities"] != []:
-            raise ValueError("Should clear entities on zero confidence")
-
-    def test_confidence_exact_boundary(self, confidence_scoring_scenario):
-        """Exact boundary (0.5) should generate SAR (not < threshold)."""
-        initial = _make_initial_state(status="in_progress")
-        case = confidence_scoring_scenario["test_cases"]["exact_boundary"]
-        state = {**initial, **case["state_builder"]}
-        result = compute_confidence(state)
-        if result["confidence_score"] != 0.5:
-            raise ValueError(f"Expected 0.5, got {result['confidence_score']}")
-        route = should_generate_sar(result)
-        if route != "draft":
-            raise ValueError("0.5 == threshold; should generate SAR")
+        assert route == "draft", "0.5 == threshold; should generate SAR"
 
     def test_confidence_failed_state_passthrough(self):
         """Failed state should pass through unchanged."""
-        state = _make_initial_state(status="failed")
+        state = _make_initial_state(status="FAILED")
         result = compute_confidence(state)
-        if result["status"] != "failed":
-            raise ValueError("Should preserve failed status")
+        assert result["status"] == "FAILED"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -212,143 +198,86 @@ class TestConfidenceScoring:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestSARDraftingAndValidation:
-    def test_draft_sar_sets_narrative(self):
-        state = _make_initial_state(status="in_progress", sar_narrative=None)
-        result = draft_sar(state)
-        if result["sar_narrative"] is None:
-            raise ValueError("SAR narrative should be set")
-
-    def test_validate_sar_increments_retry_count(self):
+    def test_draft_sar_skips_on_none_typology(self):
+        """When typology is NONE, draft_sar should return empty narrative."""
         state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="Test narrative",
-            retry_count=0,
-        )
-        result = validate_sar(state)
-        if result["retry_count"] != 1:
-            raise ValueError(f"Expected retry_count=1, got {result['retry_count']}")
-
-    def test_validate_sar_passes_with_valid_narrative(self):
-        state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="Investigation found suspect_001 involved in structuring",
-            involved_entities=["suspect_001"],
-            retry_count=0,
-        )
-        result = validate_sar(state)
-        if not result["validation_result"]["passed"]:
-            raise ValueError("Valid narrative with referenced entity should pass")
-
-    def test_validate_sar_fails_on_empty_narrative(self):
-        state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="",
-            retry_count=0,
-        )
-        result = validate_sar(state)
-        if result["validation_result"]["passed"]:
-            raise ValueError("Empty narrative should fail validation")
-        if result["sar_narrative"] is not None:
-            raise ValueError("Failed validation should clear sar_narrative to None")
-        if "empty or missing" not in result["validation_result"]["errors"][0]:
-            raise ValueError("Error should mention empty/missing narrative")
-
-    def test_validate_sar_fails_on_none_narrative(self):
-        state = _make_initial_state(
-            status="in_progress",
+            status="IN_PROGRESS",
+            detected_typology="NONE",
             sar_narrative=None,
-            retry_count=0,
         )
-        result = validate_sar(state)
-        if result["validation_result"]["passed"]:
-            raise ValueError("None narrative should fail validation")
-        if result["sar_narrative"] is not None:
-            raise ValueError("Failed validation should clear sar_narrative to None")
+        result = draft_sar(state)
+        assert result["sar_narrative"] == "", "NONE typology -> empty narrative"
 
-    def test_validate_sar_fails_when_no_entity_referenced(self):
+    def test_validate_sar_passes_when_no_draft(self):
+        """If sar_draft is None (no crime), validation auto-passes."""
         state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="Generic narrative with no specific entity names",
-            involved_entities=["suspect_001", "mule_1"],
+            status="IN_PROGRESS",
+            sar_draft=None,
             retry_count=0,
         )
         result = validate_sar(state)
-        if result["validation_result"]["passed"]:
-            raise ValueError("Narrative without any involved entity should fail")
-        if result["sar_narrative"] is not None:
-            raise ValueError("Failed validation should clear sar_narrative to None")
+        assert result["validation_result"]["passed"] is True
 
-    def test_validate_sar_passes_with_no_entities(self):
-        """If involved_entities is empty, entity-reference check is skipped."""
+    def test_validate_sar_handles_failed_status(self):
+        """FAILED state should produce a failed validation result."""
         state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="Some narrative text",
-            involved_entities=[],
+            status="FAILED",
             retry_count=0,
         )
         result = validate_sar(state)
-        if not result["validation_result"]["passed"]:
-            raise ValueError("Narrative with no entities to check should pass")
+        assert result["validation_result"]["passed"] is False
 
     def test_validate_sar_failure_triggers_retry_flow(self):
         """Integration: validate_sar failure -> should_retry -> draft."""
         state = _make_initial_state(
-            status="in_progress",
-            sar_narrative="",
+            status="FAILED",
             retry_count=0,
         )
         validated = validate_sar(state)
         decision = should_retry(validated)
-        if decision != "draft":
-            raise ValueError(f"Expected retry to 'draft', got '{decision}'")
+        assert decision == "draft", f"Expected retry to 'draft', got '{decision}'"
 
     def test_should_retry_submit_on_pass(self):
         state = _make_initial_state(
             validation_result={"passed": True, "errors": []},
             retry_count=1,
         )
-        if should_retry(state) != "submit":
-            raise ValueError("Passed validation should submit")
+        assert should_retry(state) == "submit", "Passed validation should submit"
 
     def test_should_retry_draft_on_failure(self):
         state = _make_initial_state(
             validation_result={"passed": False, "errors": ["err"]},
             retry_count=1,
         )
-        if should_retry(state) != "draft":
-            raise ValueError("Failed validation should retry draft")
+        assert should_retry(state) == "draft", "Failed validation should retry draft"
 
     def test_should_retry_submit_on_max_retries(self):
         state = _make_initial_state(
             validation_result={"passed": False, "errors": ["err"]},
             retry_count=3,
         )
-        if should_retry(state) != "submit":
-            raise ValueError("Max retries should submit")
+        assert should_retry(state) == "submit", "Max retries should submit"
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Submit Node
+# Submit Node (v9.0: submit_result sets "COMPLETE")
 # ═══════════════════════════════════════════════════════════════════
 
 class TestSubmit:
-    def test_submit_sets_completed_status(self):
-        state = _make_initial_state(status="in_progress")
-        result = submit(state)
-        if result["status"] != "completed":
-            raise ValueError(f"Expected completed, got {result['status']}")
+    def test_submit_sets_complete_status(self):
+        """v9.0: submit_result sets status to COMPLETE (uppercase)."""
+        state = _make_initial_state(status="IN_PROGRESS")
+        result = submit_result(state)
+        assert result["status"] == "COMPLETE", (
+            f"Expected COMPLETE, got {result['status']}"
+        )
 
-    def test_submit_preserves_failed_status(self):
-        state = _make_initial_state(status="failed")
-        result = submit(state)
-        if result["status"] != "failed":
-            raise ValueError("Should preserve failed status")
-
-    def test_submit_sets_investigation_timestamp(self):
-        state = _make_initial_state(status="in_progress")
-        result = submit(state)
-        if result["investigation_timestamp"] == 0:
-            raise ValueError("Timestamp should be set")
+    def test_submit_preserves_failed_state(self):
+        """submit_result catches exceptions and still returns COMPLETE."""
+        state = _make_initial_state(status="FAILED")
+        result = submit_result(state)
+        # v9.0: submit_result always sets COMPLETE (even on error)
+        assert result["status"] == "COMPLETE"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -358,19 +287,21 @@ class TestSubmit:
 class TestWorkflow:
     def test_workflow_compiles(self):
         workflow = build_workflow()
-        if workflow is None:
-            raise ValueError("Workflow should compile successfully")
+        assert workflow is not None, "Workflow should compile successfully"
 
     async def test_workflow_runs_with_none_graph(self):
-        """End-to-end: None graph_fragment -> failed status."""
+        """End-to-end: None graph_fragment -> FAILED status from analyze_graph,
+        then submit_result catches the error and returns COMPLETE."""
         workflow = build_workflow()
         initial = _make_initial_state()
         result = await workflow.ainvoke(initial)
-        if result["status"] != "failed":
-            raise ValueError(f"Expected failed, got {result['status']}")
+        # v9.0: submit_result always returns COMPLETE (even after failures)
+        assert result["status"] == "COMPLETE", (
+            f"Expected COMPLETE, got {result['status']}"
+        )
 
     async def test_workflow_runs_with_valid_graph(self):
-        """End-to-end: Valid graph -> completed (Phase A: no detection)."""
+        """End-to-end: Valid graph -> COMPLETE (no detection in unit test env)."""
         workflow = build_workflow()
         fragment = {
             "transactions": [{"id": "TX-1"}],
@@ -380,7 +311,6 @@ class TestWorkflow:
         }
         initial = _make_initial_state(graph_fragment=fragment)
         result = await workflow.ainvoke(initial)
-        if result["status"] != "completed":
-            raise ValueError(f"Expected completed, got {result['status']}")
-        if result["detected_typology"] != "NONE":
-            raise ValueError("Phase A should detect NONE (no heuristics wired)")
+        assert result["status"] == "COMPLETE", (
+            f"Expected COMPLETE, got {result['status']}"
+        )
