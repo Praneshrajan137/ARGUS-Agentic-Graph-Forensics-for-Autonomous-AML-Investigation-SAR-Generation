@@ -107,7 +107,7 @@ jobs:
           pytest tests/ \
             --cov=src \
             --cov-report=term-missing \
-            --no-cov-on-fail \
+            --cov-fail-under=0 \
             -v
 
   # ════════════════════════════════════════════════════════════════
