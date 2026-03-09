@@ -12,7 +12,7 @@ FROM python:3.11-slim AS builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libgoogle-perftools-dev && \
+    libgoogle-perftools-dev && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -23,9 +23,11 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements-prod.txt
 
 # Download spaCy model into the install prefix
 # [MED-07] v3.0: stderr is NOT suppressed — build failures must be visible
-RUN PYTHONPATH=/install/lib/python3.11/site-packages \
-    /install/bin/python -m spacy download en_core_web_sm || \
-    pip install --no-cache-dir --prefix=/install en_core_web_sm
+# Note: /install/bin/python does NOT exist (pip --prefix doesn't copy the
+# interpreter binary). Use the system python with PYTHONPATH instead, and
+# install the model wheel directly from the spaCy GitHub releases.
+RUN pip install --no-cache-dir --prefix=/install \
+    https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # --- Stage 2: Runtime -------------------------------------------
 FROM python:3.11-slim
@@ -33,7 +35,7 @@ FROM python:3.11-slim
 # Install TCMalloc runtime library (available on both amd64 and arm64)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libtcmalloc-minimal4 && \
+    libtcmalloc-minimal4 && \
     rm -rf /var/lib/apt/lists/*
 
 # [CRIT-02] Detect TCMalloc library path at build time.
@@ -41,11 +43,11 @@ RUN apt-get update && \
 # arm64 (/usr/lib/aarch64-linux-gnu/) without hardcoding.
 RUN TCMALLOC_PATH=$(find /usr/lib -name "libtcmalloc_minimal.so.4" 2>/dev/null | head -1) && \
     if [ -n "$TCMALLOC_PATH" ]; then \
-        echo "TCMALLOC_PATH=$TCMALLOC_PATH" > /etc/tcmalloc.env; \
-        echo "Detected TCMalloc at: $TCMALLOC_PATH"; \
+    echo "TCMALLOC_PATH=$TCMALLOC_PATH" > /etc/tcmalloc.env; \
+    echo "Detected TCMalloc at: $TCMALLOC_PATH"; \
     else \
-        echo "WARNING: TCMalloc not found, proceeding without it"; \
-        echo "TCMALLOC_PATH=" > /etc/tcmalloc.env; \
+    echo "WARNING: TCMalloc not found, proceeding without it"; \
+    echo "TCMALLOC_PATH=" > /etc/tcmalloc.env; \
     fi
 
 # Create non-root user (UID 1000 — standard convention)
@@ -75,8 +77,16 @@ ENV PYTHONHASHSEED=0 \
 # pass --env LD_PRELOAD=<path> explicitly.
 
 # Make entrypoint executable
-RUN chmod +x ralph.sh && \
+# Strip Windows CRLF line endings — #!/bin/bash\r causes "exec: no such file"
+RUN sed -i 's/\r$//' ralph.sh && \
+    chmod +x ralph.sh && \
     chmod +x scripts/preflight.sh 2>/dev/null || true
+
+# Ensure writable dirs for ralph_runner (runs as non-root agent user)
+# Windows source files may lack write permission — chmod fixes this
+RUN mkdir -p /app/plans /app/state && \
+    chown -R agent:agent /app/plans /app/state && \
+    chmod 755 /app/plans /app/state
 
 # Switch to non-root user
 USER agent

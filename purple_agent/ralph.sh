@@ -17,9 +17,9 @@ if [ -f /etc/tcmalloc.env ]; then
     fi
 fi
 
-# Navigate to PROJECT ROOT (parent of scripts/).
-# ralph.sh lives in scripts/. "$(dirname "$0")" resolves to "scripts".
-cd "$(dirname "$0")/.."
+# Navigate to PROJECT ROOT.
+# ralph.sh lives in the project root (not scripts/), so dirname "$0" = /app.
+cd "$(dirname "$0")"
 
 CHILD_PID=0
 

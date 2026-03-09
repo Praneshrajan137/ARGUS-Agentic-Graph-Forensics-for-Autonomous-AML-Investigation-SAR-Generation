@@ -101,6 +101,14 @@ class TestGetNextTask:
         if task is not None:
             raise ValueError("T2/T3 depend on T1; should be blocked")
 
+    def test_get_next_task_recognizes_complete_status(self, prd_path):
+        """PRD uses 'complete' (not 'completed') — ralph_runner must accept both."""
+        data = load_prd(prd_path)
+        data["tasks"][0]["status"] = "complete"
+        task = get_next_task(data)
+        assert task is not None, "T2/T3 should be unblocked when T1 is 'complete'"
+        assert task["id"] in ("T2", "T3")
+
 
 class TestAllTasksComplete:
     def test_all_complete_false(self, prd_path):
@@ -114,6 +122,13 @@ class TestAllTasksComplete:
             t["status"] = "completed"
         if not all_tasks_complete(data):
             raise ValueError("Should be True when all completed")
+
+    def test_all_complete_with_complete_status(self, prd_path):
+        """'complete' status should count as finished (matches prd.json)."""
+        data = load_prd(prd_path)
+        for t in data["tasks"]:
+            t["status"] = "complete"
+        assert all_tasks_complete(data), "Should be True when all tasks are 'complete'"
 
 
 class TestLogProgress:

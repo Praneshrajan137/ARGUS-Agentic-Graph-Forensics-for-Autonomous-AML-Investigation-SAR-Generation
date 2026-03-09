@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════════════════════════════
+# Green Financial Crime Agent — Docker Build Context Exclusions
+# The Panopticon Protocol v8.0
+#
+# Reduces build context from ~458MB to ~5MB without affecting
+# the final image contents. Only files NOT needed inside the
+# container are excluded.
+# ═══════════════════════════════════════════════════════════════════
+
+# Version control
+.git
+.gitignore
+
+# Virtual environment (installed fresh from requirements.txt in Docker)
+.venv
+
+# Purple agent (separate container, separate Dockerfile)
+purple_agent/
+
+# Test & coverage artifacts (not needed at runtime)
+tests/
+.pytest_cache/
+.coverage
+.coveragerc
+htmlcov/
+.mypy_cache/
+pytest.ini
+
+# IDE and editor artifacts
+.vscode/
+.idea/
+.cursor/
+.claude/
+*.swp
+*.swo
+
+# Python bytecode (rebuilt in container)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Docker-in-docker prevention
+docker-compose*.yml
+
+# Build artifacts and scenario configs
+results/
+scenarios/
+
+# Documentation (not needed at runtime)
+*.md
+prd.json
+progress.txt

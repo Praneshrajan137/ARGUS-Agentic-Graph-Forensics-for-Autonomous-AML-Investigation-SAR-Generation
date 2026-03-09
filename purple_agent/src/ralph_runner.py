@@ -62,7 +62,7 @@ def get_next_task(prd: dict[str, Any]) -> dict[str, Any] | None:
         deps = candidate.get("deps", [])
         all_deps_done = all(
             any(
-                t["id"] == dep_id and t.get("status") in ("completed", "done")
+                t["id"] == dep_id and t.get("status") in ("completed", "done", "complete")
                 for t in tasks
             )
             for dep_id in deps
@@ -75,7 +75,7 @@ def get_next_task(prd: dict[str, Any]) -> dict[str, Any] | None:
 def all_tasks_complete(prd: dict[str, Any]) -> bool:
     """Check if all tasks are completed."""
     tasks = prd.get("tasks", [])
-    return all(t.get("status") in ("completed", "done") for t in tasks)
+    return all(t.get("status") in ("completed", "done", "complete") for t in tasks)
 
 
 def log_progress(path: str, task_id: str, status: str, duration: float) -> None:
