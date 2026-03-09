@@ -201,7 +201,7 @@ def make_node(
 
     # v12.0 [LOW-13]: Node ID must be non-empty.
     if not node_id or not node_id.strip():
-        raise ValueError(f"make_node: node_id must be non-empty")
+        raise ValueError("make_node: node_id must be non-empty")
 
     return {
         "id": node_id,

@@ -3,12 +3,10 @@ Test: A2A Client -- Protobuf communication, retry, circuit breaker
 PRD Reference: Task A4
 28 tests covering protobuf conversion, validation, circuit breaker, and retry.
 """
-import asyncio
 import logging
 import time
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
-import math
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import httpx
@@ -18,7 +16,6 @@ from src.core.a2a_client import (
     A2AClient,
     CircuitBreaker,
     CircuitBreakerOpen,
-    _validate_amount,
     _validate_graph_fragment,
     _protobuf_to_dict,
     _CIRCUIT_BREAKER_MIN_CALLS,

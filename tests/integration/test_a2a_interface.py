@@ -15,14 +15,11 @@ Tests cover:
 
 import pytest
 from fastapi.testclient import TestClient
-import networkx as nx
 
 from src.core.a2a_interface import (
     app,
     set_graph,
-    set_ground_truth,
-    AgentManifest,
-    HealthResponse
+    set_ground_truth
 )
 
 

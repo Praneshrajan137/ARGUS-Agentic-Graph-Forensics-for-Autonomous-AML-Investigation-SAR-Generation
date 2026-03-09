@@ -13,9 +13,7 @@ These tests ensure that:
 import pytest
 import json
 import hashlib
-import pickle
-from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import networkx as nx
 
@@ -480,8 +478,6 @@ class TestFullPipelineReproducibility:
         from src.core.a2a_interface import (
             _compute_entity_metrics,
             _compute_typology_score,
-            _validate_five_ws,
-            _compute_efficiency_score,
         )
 
         # Same investigation data

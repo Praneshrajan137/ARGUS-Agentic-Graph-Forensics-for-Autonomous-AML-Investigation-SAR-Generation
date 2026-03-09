@@ -16,7 +16,7 @@ v8.0: Decimal-everywhere for currency amounts. Dual-jurisdiction (FinCEN + FIU-I
 """
 
 from typing import List, Dict, Any, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime
 import zoneinfo
 from decimal import Decimal
 import random
@@ -26,8 +26,6 @@ import logging
 from ..config import (
     TIMEZONE_FINCEN,
     TIMEZONE_FIU_IND,
-    EVIDENCE_DISCREPANCY_THRESHOLD_USD,
-    EVIDENCE_DISCREPANCY_THRESHOLD_INR,
 )
 
 logger = logging.getLogger(__name__)

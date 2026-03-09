@@ -3,8 +3,6 @@ Test: LangGraph Decision Loop -- State Machine
 PRD Reference: Task A7
 Updated for v9.0 API (uppercase statuses, renamed functions/fields).
 """
-import pytest
-from decimal import Decimal
 from typing import Any
 
 from src.core.decision_loop import (

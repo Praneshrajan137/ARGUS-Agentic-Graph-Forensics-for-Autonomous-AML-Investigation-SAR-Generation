@@ -15,7 +15,6 @@ Test Categories:
 
 import pytest
 import networkx as nx
-from typing import List, Tuple
 
 from src.utils.validators import (
     validate_graph_structure,

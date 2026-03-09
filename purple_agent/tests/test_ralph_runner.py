@@ -3,7 +3,6 @@ Test: Ralph Runner -- Per-iteration task executor
 PRD Reference: Task A6
 """
 import json
-import os
 import pytest
 from pathlib import Path
 
@@ -138,6 +137,6 @@ class TestLogProgress:
         content = Path(progress_path).read_text()
         if "T1" not in content or "T2" not in content:
             raise ValueError("Progress entries missing")
-        lines = [l for l in content.strip().split("\n") if l]
+        lines = [line for line in content.strip().split("\n") if line]
         if len(lines) != 2:
             raise ValueError(f"Expected 2 lines, got {len(lines)}")

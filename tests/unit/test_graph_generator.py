@@ -13,7 +13,6 @@ Tests cover:
 import pytest
 import networkx as nx
 import time
-from typing import Set
 
 from src.core.graph_generator import (
     generate_scale_free_graph,
@@ -319,12 +318,12 @@ class TestGraphGeneratorPerformance:
         
         for _ in range(3):
             start_time = time.time()
-            G = generate_scale_free_graph(n_nodes=500, seed=42)
+            _G = generate_scale_free_graph(n_nodes=500, seed=42)  # noqa: F841
             elapsed = time.time() - start_time
             times.append(elapsed)
         
         # All runs should be within reasonable bounds (3x max variance for fast operations)
-        avg_time = sum(times) / len(times)
+        _avg_time = sum(times) / len(times)  # noqa: F841
         max_time = max(times)
         min_time = min(times)
         

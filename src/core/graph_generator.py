@@ -15,10 +15,9 @@ v7.0: Initial implementation with locale-aligned generation.
 """
 
 import networkx as nx
-from typing import Optional, List, Union, Callable, Any
+from typing import Optional, List, Union
 from decimal import Decimal
 import random
-import uuid
 import pickle
 import logging
 from pathlib import Path
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 # SDV import with graceful fallback
 # We need to check if SDV is actually installed, not just if our module imports
 try:
-    import sdv
+    import sdv  # noqa: F401
     from .sdv_models import get_transaction_synthesizer
     SDV_AVAILABLE = True
     logger.info("SDV successfully imported for correlated data generation")
@@ -278,7 +277,7 @@ def _add_transaction_attributes_sdv(
     
     # Use seed to deterministically shuffle and select
     rng = random.Random(seed)
-    np_rng = np.random.RandomState(seed)
+    _np_rng = np.random.RandomState(seed)  # noqa: F841  reserved for future SDV seeding
     
     # Shuffle the pool using the seed
     indices = list(range(len(synthetic_pool)))

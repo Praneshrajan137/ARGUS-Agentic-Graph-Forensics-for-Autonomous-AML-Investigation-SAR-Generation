@@ -25,7 +25,7 @@ from unittest.mock import patch
 import pytest
 
 from src.core.graph_reasoner import GraphReasoner
-from src.config import MAX_NODE_DEGREE, MAX_PATHS_PER_SEARCH
+from src.config import MAX_PATHS_PER_SEARCH
 
 
 # ===================================================================

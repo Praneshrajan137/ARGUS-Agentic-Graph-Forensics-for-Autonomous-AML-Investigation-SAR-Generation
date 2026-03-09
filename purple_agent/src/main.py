@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # Load .env BEFORE any other imports that read os.getenv()
 load_dotenv()
 
-from src.config import (
+from src.config import (  # noqa: E402
     A2A_SERVER_HOST,
     A2A_SERVER_PORT,
     AGENT_VERSION,

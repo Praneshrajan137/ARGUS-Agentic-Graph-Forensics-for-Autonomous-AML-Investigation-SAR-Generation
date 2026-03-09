@@ -27,7 +27,6 @@ import logging
 
 from src.config import (
     AGENT_VERSION,
-    A2A_SERVER_PORT,
     PROTOBUF_CONTENT_TYPE,
     DEFAULT_HOP_DEPTH,
     MAX_FRAGMENT_TRANSACTIONS,

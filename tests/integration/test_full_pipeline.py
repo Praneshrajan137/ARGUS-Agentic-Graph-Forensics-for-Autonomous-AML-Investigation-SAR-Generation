@@ -15,9 +15,7 @@ import pytest
 import pickle
 import time
 import sys
-import tempfile
 from pathlib import Path
-from datetime import datetime
 
 import networkx as nx
 
@@ -231,7 +229,7 @@ class TestSkillScriptImplementations:
     def test_skill_cycle_detection(self):
         """Test cycle detection using skill script."""
         try:
-            from detect_cycles import detect_cycles, validate_layering_chain
+            from detect_cycles import detect_cycles, validate_layering_chain  # noqa: F401
             
             # Create valid chain
             G = nx.DiGraph()
@@ -397,7 +395,7 @@ class TestCompletePipeline:
             ground_truths.append(truth)
         
         # Verify each injection created unique sources
-        all_mules = [t['mule_id'] for t in ground_truths]
+        all_mules = [t['mule_id'] for t in ground_truths]  # noqa: F841
         # Note: mules might be the same if auto-selected, but sources should differ
         
         # Total structuring sources should be 30

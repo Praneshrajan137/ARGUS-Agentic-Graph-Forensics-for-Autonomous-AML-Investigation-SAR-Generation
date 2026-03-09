@@ -38,7 +38,6 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone, timedelta
 
 from src.config import (
-    SAR_MAX_RETRY,
     SAR_LLM_MODEL,
     SAR_LLM_TEMPERATURE,
     SAR_LLM_SEED,

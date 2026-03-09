@@ -17,9 +17,8 @@ Tests cover:
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-import pytest
 
-from src.core.evidence_synthesizer import EvidenceSynthesizer, EvidenceResult
+from src.core.evidence_synthesizer import EvidenceSynthesizer
 from src.config import (
     IFSC_COMPILED,
     PAN_COMPILED,
@@ -29,7 +28,6 @@ from src.config import (
     PAN_SEARCH_COMPILED,
     SWIFT_SEARCH_COMPILED,
     IBAN_SEARCH_COMPILED,
-    EVIDENCE_DISCREPANCY_THRESHOLD_USD,
 )
 
 

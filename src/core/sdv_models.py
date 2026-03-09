@@ -12,7 +12,6 @@ Reference: Follows patterns from .claude/skills/data-generation/scripts/sdv_corr
 """
 
 import logging
-from typing import Optional
 
 import numpy as np
 import pandas as pd

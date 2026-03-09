@@ -24,8 +24,6 @@ from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from src.config import (
-    A2A_SERVER_HOST,
-    A2A_SERVER_PORT,
     AGENT_VERSION,
     PROTOBUF_CONTENT_TYPE,
 )

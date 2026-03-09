@@ -4,7 +4,6 @@ PRD Reference: Task A3
 """
 import time
 import json
-import pytest
 from decimal import Decimal
 from protos import financial_crime_pb2 as pb2
 

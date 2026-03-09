@@ -14,10 +14,9 @@ Tests cover:
 """
 from decimal import Decimal
 
-import pytest
 
 from src.core.graph_reasoner import GraphReasoner
-from src.core.heuristics.layering import detect_layering, LayeringChain, LayeringResult
+from src.core.heuristics.layering import detect_layering
 from src.config import MIN_CHAIN_LENGTH
 
 

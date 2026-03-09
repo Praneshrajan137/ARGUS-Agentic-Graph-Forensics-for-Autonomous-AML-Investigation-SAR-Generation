@@ -3,9 +3,7 @@ Test: A2A Server -- FastAPI endpoints
 PRD Reference: Task A8
 13 tests covering health, agent card, JSON/Protobuf requests, error handling.
 """
-import json
 import pytest
-from decimal import Decimal
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient

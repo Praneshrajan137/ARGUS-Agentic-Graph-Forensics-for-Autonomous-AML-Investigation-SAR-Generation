@@ -11,9 +11,7 @@ Test Categories:
 5. get_crime_labels function (NOT YET IMPLEMENTED - skipped)
 """
 
-import pytest
 import networkx as nx
-from datetime import datetime, timedelta
 from decimal import Decimal
 
 from src.core.crime_injector import (

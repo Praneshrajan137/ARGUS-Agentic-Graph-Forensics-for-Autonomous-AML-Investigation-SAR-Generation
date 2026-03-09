@@ -18,10 +18,9 @@ Tests cover:
 """
 from decimal import Decimal
 
-import pytest
 
 from src.core.graph_reasoner import GraphReasoner
-from src.core.heuristics.structuring import detect_structuring, StructuringResult
+from src.core.heuristics.structuring import detect_structuring
 from src.config import STRUCTURING_MIN_COUNT
 
 

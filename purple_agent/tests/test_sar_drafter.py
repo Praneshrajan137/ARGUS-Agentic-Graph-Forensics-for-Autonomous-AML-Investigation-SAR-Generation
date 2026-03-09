@@ -19,14 +19,10 @@ Tests cover:
   - Mechanical SAR template (Five Ws, ISO timestamps, graph-only entities)
 """
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
 
-import pytest
 
 from src.config import (
     SAR_MAX_NARRATIVE_CHARS,
-    TIMEZONE_FINCEN,
-    TIMEZONE_FIU_IND,
 )
 
 
@@ -117,7 +113,7 @@ class TestFiveWsCompleteness:
 
     def test_draft_sar_returns_five_ws(self) -> None:
         """All five sections (who, what, where, when, why) must be non-empty strings."""
-        from src.core.sar_drafter import SARDrafter, SARDraft
+        from src.core.sar_drafter import SARDraft
 
         draft = SARDraft(
             who="mule_1, src_01",

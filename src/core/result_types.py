@@ -13,7 +13,7 @@ CRITICAL: All monetary fields are Decimal. NEVER float.
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -11,7 +11,7 @@ Validation Categories:
 """
 
 import networkx as nx
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 import statistics
 
 

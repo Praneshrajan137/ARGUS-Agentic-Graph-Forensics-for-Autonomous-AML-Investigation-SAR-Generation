@@ -4,7 +4,7 @@ These stubs allow mypy to resolve dynamically-built protobuf message classes.
 The actual classes are created at runtime by protobuf's descriptor builder.
 """
 
-from typing import Any, Mapping, Sequence
+from typing import Mapping, Sequence
 from google.protobuf.message import Message
 
 

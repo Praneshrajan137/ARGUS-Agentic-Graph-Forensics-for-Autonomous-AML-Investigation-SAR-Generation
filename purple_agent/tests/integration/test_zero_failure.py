@@ -10,7 +10,6 @@ These tests enforce the Zero-Failure Mandate:
 4. v9.0: Full-narrative entity validation, positive evidence matching
 5. v8.0: Architecture §4 Step 6 formula, idempotency, currency filtering
 """
-import hashlib
 import pytest
 from decimal import Decimal
 
