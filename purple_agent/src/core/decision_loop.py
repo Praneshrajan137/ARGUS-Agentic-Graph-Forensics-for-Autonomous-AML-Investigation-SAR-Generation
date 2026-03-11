@@ -564,7 +564,12 @@ def submit_result(state: InvestigationState) -> InvestigationState:
             state["case_id"], typology, state.get("confidence_score", 0),
             idempotency_key[:16],
         )
-        return {**state, "status": "COMPLETE"}
+        return {
+            **state,
+            "status": "COMPLETE",
+            "sar_narrative": formatted_narrative,
+            "investigation_timestamp": result_dict["investigation_timestamp"],
+        }
     except Exception as e:
         logger.error("[%s] Submission failed: %s", state["case_id"], e)
         return {**state, "status": "COMPLETE"}

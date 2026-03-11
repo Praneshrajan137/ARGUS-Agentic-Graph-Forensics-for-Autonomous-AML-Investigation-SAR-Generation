@@ -121,10 +121,10 @@ A2A_SERVER_PORT = int(os.getenv("A2A_SERVER_PORT", "8080"))
 # SAR GENERATION
 # ═══════════════════════════════════════════════════════════════════
 SAR_MAX_RETRY = int(os.getenv("SAR_MAX_RETRY", "3"))
-SAR_LLM_MODEL = os.getenv("SAR_LLM_MODEL", "gpt-4o-mini")
+SAR_LLM_MODEL = os.getenv("SAR_LLM_MODEL", "gpt-4.1")
 SAR_LLM_TEMPERATURE = float(os.getenv("SAR_LLM_TEMPERATURE", "0.0"))
 # v7.0 [ALN-02 FIX]: LLM seed for deterministic narrative generation.
-# Model-specific behavior: OpenAI gpt-4o-mini respects seed parameter.
+# Model-specific behavior: OpenAI GPT-4.1 respects seed parameter.
 SAR_LLM_SEED = int(os.getenv("SAR_LLM_SEED", "42"))
 # v7.0 [ALN-02 FIX]: Maximum narrative length in characters.
 # FinCEN e-filing has a practical limit; mechanical SAR fallback

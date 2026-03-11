@@ -2,8 +2,9 @@
 
 Autonomous forensic financial crime investigation system with dual-jurisdiction SAR generation, zero-hallucination guarantees, and deterministic output.
 
-**Agent Version:** 7.0.0
+**Agent Version:** 7.1.0
 **Python:** 3.11+ required
+**SAR Model:** GPT-4.1
 
 ---
 
@@ -12,16 +13,16 @@ Autonomous forensic financial crime investigation system with dual-jurisdiction 
 Purple Agent is a production-grade autonomous financial crime investigator. It operates as a node in an Agent-to-Agent (A2A) network, communicating via Protocol Buffers over HTTP. The system:
 
 - Receives investigation requests via A2A protocol (FastAPI :8080)
-- Fetches financial transaction graphs from upstream agents via Protobuf
+- Fetches financial transaction graphs from the Green Agent via Protobuf
 - Constructs NetworkX MultiDiGraph representations preserving all parallel edges and transaction metadata
 - Detects Structuring patterns (fan-in below Currency Transaction Report thresholds) using BFS traversal with currency-grouped threshold comparisons
 - Detects Layering patterns (decay chain analysis) using iterative DFS with bounded depth and path explosion circuit breakers
 - Synthesizes unstructured text evidence using dual spaCy NER + regex extraction, cross-referencing against ledger ground truth
 - Computes confidence scores with a transparent formula gated on configurable thresholds before SAR generation
-- Generates FinCEN SAR (US/USD) and FIU-IND STR (India/INR) narratives using the Five Ws framework with LLM generation and mechanical fallback guarantees
+- Generates FinCEN SAR (US/USD) and FIU-IND STR (India/INR) narratives using the Five Ws framework with GPT-4.1 and mechanical fallback guarantees
 - Validates every entity, amount, and timestamp cited in SAR narratives against the source graph -- zero hallucination tolerance
-- Achieves 100% entity recall on criminal node detection
-- Produces byte-identical output across 10+ consecutive runs
+- Submits results to the Green Agent with SHA-256 idempotency keys for deduplication
+- Produces deterministic output across consecutive runs (PYTHONHASHSEED=0, LLM seed=42)
 
 ---
 
@@ -65,13 +66,29 @@ docker run -p 8080:8080 \
     purple-agent
 ```
 
-### Docker Compose (With Green Agent)
+### End-to-End Investigation (Docker Compose)
+
+Run a full AML investigation with both Green and Purple agents:
 
 ```bash
-docker compose up --build
-# Purple Agent: http://localhost:8080
-# Green Agent:  http://localhost:9090
+# From the project root (not purple_agent/)
+# Set your OpenAI API key in the environment
+export OPENAI_API_KEY=sk-your-key-here
+
+# Start both agents
+docker-compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d
+
+# Watch logs
+docker-compose -f docker-compose.yml -f docker-compose.e2e.yml logs -f
+
+# Trigger investigations (from host, once both agents are healthy)
+python scripts/trigger_investigation.py
+
+# Tear down
+docker-compose -f docker-compose.yml -f docker-compose.e2e.yml down
 ```
+
+The E2E override (`docker-compose.e2e.yml`) starts the Purple Agent as a FastAPI server on port 8080 instead of running the Ralph Wiggum task loop. The trigger script sends investigation requests for known criminal nodes and reports SAR narratives, entity recall, and confidence scores.
 
 ### Health Check
 
@@ -80,7 +97,8 @@ curl -s http://localhost:8080/health | python -m json.tool
 # Expected:
 # {
 #     "status": "healthy",
-#     "agent_version": "7.0.0"
+#     "service": "purple_agent",
+#     "version": "7.1.0"
 # }
 ```
 
@@ -90,41 +108,57 @@ curl -s http://localhost:8080/health | python -m json.tool
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete system design.
 
+### LangGraph Decision Loop (8 nodes)
+
 ```
-InvestigationRequest (protobuf)
+InvestigationRequest (protobuf / JSON)
         |
         v
 +--- LangGraph Decision Loop (8 nodes) -------------------+
 |                                                          |
-|  ingest -> detect_structuring -> detect_layering         |
-|    |                                                     |
-|    v                                                     |
-|  synthesize_evidence -> compute_confidence               |
-|                            |           |                 |
-|                    >= 0.5  |           | < 0.5           |
-|                            v           v                 |
-|                      draft_sar      submit               |
-|                         |         (LOW_CONFIDENCE)       |
-|                         v                                |
-|                    validate_sar                           |
-|                      |       |                           |
-|               pass --+       +-- fail (retry <= 3)       |
-|                 |                    |                    |
-|                 v                    v                    |
-|              submit          draft_sar (retry)           |
-|                              |                           |
-|                              +-> mechanical SAR -> submit|
+|  receive -> analyze -> detect -> synthesize              |
+|                                       |                  |
+|                                       v                  |
+|                              compute_confidence          |
+|                               |             |            |
+|                       >= 0.5  |             | < 0.5      |
+|                               v             v            |
+|                            draft         submit          |
+|                              |        (LOW_CONFIDENCE)   |
+|                              v                           |
+|                          validate                        |
+|                           |       |                      |
+|                    pass --+       +-- fail (retry <= 3)  |
+|                      |                    |              |
+|                      v                    v              |
+|                   submit          draft (retry)          |
+|                                   |                      |
+|                                   +-> mechanical SAR     |
+|                                       -> submit          |
 +----------------------------------------------------------+
         |
         v
-InvestigationResult (protobuf) -> upstream agent
+InvestigationResult (protobuf / JSON) -> Green Agent
 ```
+
+Node responsibilities:
+
+| Node | Implementation | Responsibility |
+|------|---------------|----------------|
+| `receive` | `receive_case()` | Initialize investigation, set status to IN_PROGRESS |
+| `analyze` | `analyze_graph()` | Fetch GraphFragment from Green Agent via A2A Client |
+| `detect` | `detect_typology()` | Run structuring (BFS) and layering (DFS) on all nodes |
+| `synthesize` | `synthesize_evidence()` | Cross-reference text evidence with ledger via spaCy NER |
+| `compute_confidence` | `compute_confidence()` | Score computation; gate on CONFIDENCE_THRESHOLD |
+| `draft` | `draft_sar()` | GPT-4.1 Five Ws narrative with prompt injection sanitization |
+| `validate` | `validate_sar()` | Verify every cited entity/amount/timestamp exists in graph |
+| `submit` | `submit_result()` | A2A submission with SHA-256 idempotency key |
 
 Conditional edges:
 
 - `compute_confidence` -> `submit` (when score < CONFIDENCE_THRESHOLD)
-- `validate_sar` -> `draft_sar` (retry, max SAR_MAX_RETRY times)
-- `validate_sar` -> `submit` (passed OR retries exhausted -> mechanical SAR)
+- `validate` -> `draft` (retry, max SAR_MAX_RETRY times)
+- `validate` -> `submit` (passed OR retries exhausted -> mechanical SAR)
 
 ---
 
@@ -132,63 +166,61 @@ Conditional edges:
 
 ```
 purple_agent/
-+-- agent.json                    [EXISTS]  A2A agent card (capabilities, endpoints)
-+-- scenario.toml                 [EXISTS]  Scenario configuration
-+-- Dockerfile                    [EXISTS]  Container definition (requires upgrade to spec)
-+-- .dockerignore                 [EXISTS]  Excludes .git, tests, .env, scripts/
-+-- requirements.txt              [EXISTS]  Pinned deps (NO >= ranges)
-+-- pyproject.toml                [EXISTS]  pytest: asyncio_mode=auto, pythonpath=["."]
-+-- ralph.sh                      [EXISTS]  Die-and-restart loop (NO set -e)
-+-- prompt.md                     [EXISTS]  LLM system prompt for SAR generation
-+-- README.md                     [EXISTS]  Project overview and quick start
-+-- ARCHITECTURE.md               [EXISTS]  Full system architecture document
-+-- CHANGELOG.md                  [EXISTS]  Release history (Keep a Changelog format)
-+-- .env.example                  [EXISTS]  All env vars with PYTHONHASHSEED=0
-+-- .gitignore                    [EXISTS]  Does NOT exclude protos/*_pb2.py
++-- agent.json                     A2A agent card (capabilities, endpoints)
++-- scenario.toml                  Scenario configuration
++-- Dockerfile                     Multi-stage: Python 3.11, TCMalloc, non-root
++-- .dockerignore                  Excludes .git, tests, .env, scripts/
++-- requirements.txt               Pinned deps (NO >= ranges)
++-- requirements-prod.txt          Production subset (no test deps)
++-- pyproject.toml                 pytest: asyncio_mode=auto, pythonpath=["."]
++-- ralph.sh                       Die-and-restart loop (NO set -e)
++-- prompt.md                      LLM system prompt for SAR generation
++-- README.md                      This file
++-- ARCHITECTURE.md                Full system architecture document
++-- CHANGELOG.md                   Release history (Keep a Changelog format)
++-- .env.example                   All env vars with PYTHONHASHSEED=0
++-- .gitignore                     Does NOT exclude protos/*_pb2.py
 +-- protos/
-|   +-- __init__.py               [EXISTS]  Package marker (BUG-02 fix)
-|   +-- financial_crime.proto     [EXISTS]  7 message types (FROZEN -- shared with Green)
-|   +-- financial_crime_pb2.py    [EXISTS]  Generated bindings (committed, not gitignored)
+|   +-- __init__.py                Package marker
+|   +-- financial_crime.proto      7 message types (FROZEN -- shared with Green)
+|   +-- financial_crime_pb2.py     Generated bindings (committed)
 +-- plans/
-|   +-- prd.json                  [EXISTS]  20 tasks with dependencies (A1-D5)
-+-- progress.txt                  [EXISTS]  Ralph Wiggum iteration log
+|   +-- prd.json                   20 tasks with dependencies (A1-D5)
 +-- scripts/
-|   +-- preflight.sh              [EXISTS]  Pre-deployment validation (chmod +x)
+|   +-- preflight.sh               Pre-deployment validation
 +-- src/
-|   +-- __init__.py               [EXISTS]  Package marker
-|   +-- main.py                   [EXISTS]  Entry: load_dotenv -> RedactingFormatter -> uvicorn
-|   +-- config.py                 [EXISTS]  SINGLE SOURCE OF TRUTH for all constants
-|   +-- baseline_agent.py         [EXISTS]  Minimal viable baseline investigator
-|   +-- ralph_runner.py           [EXISTS]  Per-iteration task executor
+|   +-- __init__.py
+|   +-- main.py                    Entry: load_dotenv -> RedactingFormatter -> uvicorn
+|   +-- config.py                  SINGLE SOURCE OF TRUTH for all constants
+|   +-- baseline_agent.py          Minimal viable baseline investigator
+|   +-- ralph_runner.py            Per-iteration task executor
 |   +-- core/
-|       +-- __init__.py           [EXISTS]  Package marker
-|       +-- a2a_client.py         [EXISTS]  httpx + circuit breaker + retry + protobuf
-|       +-- a2a_server.py         [EXISTS]  FastAPI endpoints (/a2a, /health)
-|       +-- decision_loop.py      [EXISTS]  LangGraph state machine (8 nodes)
-|       +-- graph_reasoner.py     [EXISTS]  MultiDiGraph + BFS + iterative DFS
-|       +-- evidence_synthesizer.py [EXISTS] spaCy NER + regex
-|       +-- sar_drafter.py        [EXISTS]  LLM Five Ws + mechanical fallback
+|       +-- __init__.py
+|       +-- a2a_client.py          httpx + circuit breaker + retry + protobuf
+|       +-- a2a_server.py          FastAPI endpoints (/a2a, /health)
+|       +-- decision_loop.py       LangGraph state machine (8 nodes)
+|       +-- graph_reasoner.py      MultiDiGraph + BFS + iterative DFS
+|       +-- evidence_synthesizer.py spaCy NER + regex
+|       +-- sar_drafter.py         LLM Five Ws + mechanical fallback
 |       +-- heuristics/
-|           +-- __init__.py       [EXISTS]  Package marker
-|           +-- structuring.py    [EXISTS]  Fan-in BFS detection
-|           +-- layering.py       [EXISTS]  Chain DFS with decay analysis
+|           +-- __init__.py
+|           +-- structuring.py     Fan-in BFS detection
+|           +-- layering.py        Chain DFS with decay analysis
 +-- tests/
-    +-- __init__.py               [EXISTS]  Package marker
-    +-- conftest.py               [EXISTS]  16 shared fixtures (ground truth data)
-    +-- test_agent_card_schema.py  [EXISTS]
-    +-- test_protobuf_schema.py       [EXISTS]
-    +-- test_a2a_client.py        [EXISTS]  27 tests
-    +-- test_a2a_server.py        [EXISTS]
-    +-- test_graph_reasoner_core.py [EXISTS]
-    +-- test_structuring_detection.py [EXISTS]
-    +-- test_layering_detection.py [EXISTS]
-    +-- test_evidence_synthesizer.py [EXISTS]
-    +-- test_sar_drafter.py       [EXISTS]
-    +-- test_decision_loop.py     [EXISTS]
+    +-- conftest.py                16 shared fixtures (ground truth data)
+    +-- test_agent_card_schema.py
+    +-- test_protobuf_schema.py
+    +-- test_a2a_client.py         27 tests
+    +-- test_a2a_server.py
+    +-- test_graph_reasoner_core.py
+    +-- test_structuring_detection.py
+    +-- test_layering_detection.py
+    +-- test_evidence_synthesizer.py
+    +-- test_sar_drafter.py
+    +-- test_decision_loop.py
     +-- integration/
-        +-- __init__.py           [EXISTS]
-        +-- test_full_pipeline.py [EXISTS]
-        +-- test_zero_failure.py  [EXISTS]
+        +-- test_full_pipeline.py
+        +-- test_zero_failure.py
 ```
 
 ---
@@ -238,7 +270,9 @@ All configuration is centralized in `src/config.py` (SSOT). Runtime overrides vi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONFIDENCE_THRESHOLD` | `0.5` | SAR filing gate |
-| `SAR_LLM_MODEL` | `gpt-4o-mini` | LLM model |
+| `SAR_LLM_MODEL` | `gpt-4.1` | LLM model for narrative generation |
+| `SAR_LLM_TEMPERATURE` | `0.0` | Greedy decoding |
+| `SAR_LLM_SEED` | `42` | Deterministic seed |
 | `SAR_MAX_RETRY` | `3` | Max SAR validation retries |
 
 ### Logging
@@ -246,7 +280,6 @@ All configuration is centralized in `src/config.py` (SSOT). Runtime overrides vi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
-| `LOG_JSON_FORMAT` | `true` | JSON structured logging |
 
 ---
 
@@ -262,13 +295,6 @@ PYTHONHASHSEED=0 pytest tests/integration/ -v
 
 # Zero-failure validation
 PYTHONHASHSEED=0 pytest tests/integration/test_zero_failure.py -v
-
-# Determinism check (10 runs, pipeline-level)
-PYTHONHASHSEED=0 bash scripts/verify_determinism.sh 10
-
-# Security scan
-bandit -r src/ -ll
-pip-audit --strict
 ```
 
 ---
@@ -295,26 +321,21 @@ Jurisdiction is determined from InvestigationRequest and stored in pipeline stat
 
 ## Deployment
 
-### Pre-deployment Validation
-
-```bash
-PYTHONHASHSEED=0 bash scripts/preflight.sh
-```
-
 ### Docker Image Characteristics
 
-- Multi-architecture: supports both amd64 and arm64
+- Multi-stage build: builder + runtime
+- ARM64 and amd64 compatible (Python 3.11-slim base)
 - Non-root execution (user: agent, UID 1000)
 - TCMalloc preloaded for memory performance
 - PYTHONHASHSEED=0 baked in for determinism
-- spaCy model pre-downloaded at build time
+- spaCy en_core_web_sm model pre-downloaded at build time
 - HEALTHCHECK built in (30s interval, 5s timeout)
 
 ### Production Recommendations
 
 - **Memory limit:** 1GB minimum, 2GB recommended
 - **CPU:** 1.0 core minimum
-- **Logging:** JSON structured output to stdout (12-factor compatible)
+- **Logging:** Structured output to stdout (12-factor compatible)
 - **Secrets:** Pass OPENAI_API_KEY via Docker secrets or env, never bake into image
 
 ### Entrypoint
@@ -332,13 +353,30 @@ PYTHONHASHSEED=0 bash scripts/preflight.sh
 
 ### POST /a2a
 
-- **Content-Type:** `application/x-protobuf`
-- **Body:** InvestigationRequest (protobuf binary)
-- **Response:** InvestigationResult (protobuf binary)
+- **Content-Type:** `application/x-protobuf` or `application/json`
+- **Body:** InvestigationRequest (protobuf binary or JSON)
+- **Response:** InvestigationResult (protobuf binary or JSON, based on Accept header)
+
+JSON request example:
+
+```json
+{
+  "case_id": "CASE-001",
+  "subject_id": "42",
+  "hop_depth": 3,
+  "jurisdiction": "fincen"
+}
+```
+
+JSON response fields: `case_id`, `sar_narrative`, `typology_detected`, `involved_entities`, `confidence_score`, `jurisdiction`, `investigation_timestamp`, `status`.
 
 ### GET /health
 
-- **Response:** `{"status": "healthy", "agent_version": "7.0.0"}`
+- **Response:** `{"status": "healthy", "service": "purple_agent", "version": "7.1.0"}`
+
+### GET /agent.json
+
+- Agent capability manifest (A2A discovery)
 
 ### GET /docs
 
@@ -348,7 +386,7 @@ PYTHONHASHSEED=0 bash scripts/preflight.sh
 
 ## Determinism Guarantees
 
-Purple Agent produces byte-identical output across consecutive runs. Mechanisms: PYTHONHASHSEED=0, sorted() on all set/dict iteration, LLM seed=42 with temperature=0.0, deterministic idempotency keys. Verify with: `scripts/verify_determinism.sh 10`
+Purple Agent produces deterministic output across consecutive runs. Mechanisms: PYTHONHASHSEED=0, sorted() on all set/dict iteration, LLM seed=42 with temperature=0.0, deterministic idempotency keys.
 
 ---
 

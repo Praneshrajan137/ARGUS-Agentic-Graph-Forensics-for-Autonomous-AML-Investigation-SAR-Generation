@@ -38,6 +38,27 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - Iterative DFS over recursive: O(V+E) space, no stack overflow risk
 - Confidence gate before SAR: prevents speculative regulatory filings
 
+## [7.1.0] - 2026-03-11
+
+### Changed
+- SAR generation model upgraded from gpt-4o-mini to GPT-4.1 (higher-quality narratives, fewer validation retries)
+- Spec version updated to v12.0 in ARCHITECTURE.md (all v6.x through v11.x defects resolved)
+
+### Added
+- End-to-end investigation workflow via Docker Compose (`docker-compose.e2e.yml` override)
+- `scripts/trigger_investigation.py` for automated E2E investigation triggering and result reporting
+
+### Fixed
+- SAR validator: skip prefix-family matching for purely numeric node IDs (eliminated false-positive hallucination flags on dates, amounts, and other numbers in narratives)
+- `InvestigationState` alignment in `a2a_server.py`: removed 7 extraneous fields, added missing `detection_results` and `sar_draft`
+- `submit_result` now returns the formatted SAR narrative and `investigation_timestamp` to API callers (previously returned empty narrative)
+- Trigger script UTF-8 output encoding for Windows compatibility
+
+### Documentation
+- Rewrote `purple_agent/README.md`: corrected decision loop node names, added E2E section, updated health check format, updated config table
+- Updated `purple_agent/ARCHITECTURE.md`: v12.0 spec version, corrected all 8 node names to match implementation, aligned `InvestigationState` TypedDict with actual code, removed outdated Dockerfile note, updated SAR model
+- Overhauled root `README.md`: Python 3.11+ badge, Purple Agent v7.1 pipeline description, protobuf A2A architecture, E2E workflow, updated project structure
+
 ## [Unreleased]
 
 ### Planned

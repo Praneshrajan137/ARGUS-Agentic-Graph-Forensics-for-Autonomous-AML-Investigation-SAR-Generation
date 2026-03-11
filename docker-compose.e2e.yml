@@ -1,0 +1,29 @@
+# E2E Investigation Override -- Purple Agent as FastAPI server
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d
+#   python scripts/trigger_investigation.py
+#   docker-compose -f docker-compose.yml -f docker-compose.e2e.yml down
+
+services:
+  purple-agent:
+    container_name: purple-e2e-agent
+    ports:
+      - "8080:8080"
+    environment:
+      - GREEN_AGENT_URL=http://green-agent:8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONHASHSEED=0
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - SAR_LLM_MODEL=gpt-4.1
+      - SAR_LLM_TEMPERATURE=0.0
+      - SAR_LLM_SEED=42
+    entrypoint: ["python", "-m", "src.main"]
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s

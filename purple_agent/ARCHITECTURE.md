@@ -1,8 +1,8 @@
 # Purple Agent -- Architecture Document
 
 > **Project Gamma | The Panopticon Protocol**
-> **Spec Version:** v11.0 (`.cursorrules` definitive -- all v6.x through v10.x defects pre-resolved)
-> **Agent Version:** 7.0.0 (`config.py` / `agent.json`)
+> **Spec Version:** v12.0 (`.cursorrules` definitive -- all v6.x through v11.x defects pre-resolved)
+> **Agent Version:** 7.1.0 (`config.py` / `agent.json`)
 > **Python:** 3.11+ required (`X | None` union syntax, `tomllib`, etc.)
 
 ---
@@ -99,37 +99,37 @@ The decision loop consists of **8 nodes** connected by conditional edges:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ingest
-    ingest --> detect_structuring
-    detect_structuring --> detect_layering
-    detect_layering --> synthesize_evidence
-    synthesize_evidence --> compute_confidence
-    compute_confidence --> draft_sar: score >= CONFIDENCE_THRESHOLD
+    [*] --> receive
+    receive --> analyze
+    analyze --> detect
+    detect --> synthesize
+    synthesize --> compute_confidence
+    compute_confidence --> draft: score >= CONFIDENCE_THRESHOLD
     compute_confidence --> submit: LOW_CONFIDENCE (skip SAR)
-    draft_sar --> validate_sar
-    validate_sar --> draft_sar: retry (count < SAR_MAX_RETRY)
-    validate_sar --> submit: passed OR retries exhausted (mechanical SAR)
+    draft --> validate
+    validate --> draft: retry (count < SAR_MAX_RETRY)
+    validate --> submit: passed OR retries exhausted (mechanical SAR)
     submit --> [*]
 ```
 
 **Node descriptions:**
 
-| Node | Responsibility |
-|------|---------------|
-| `ingest` | Parse InvestigationRequest, fetch GraphFragment, build MultiDiGraph |
-| `detect_structuring` | Fan-in BFS detection within currency-grouped threshold bands |
-| `detect_layering` | Chain DFS with decay rate analysis (iterative, stack-based) |
-| `synthesize_evidence` | Cross-reference text evidence with ledger via spaCy NER + regex |
-| `compute_confidence` | Score computation BEFORE SAR generation; gate on threshold |
-| `draft_sar` | LLM Five Ws narrative with prompt injection sanitization |
-| `validate_sar` | Verify every cited entity/amount/timestamp exists in graph |
-| `submit` | A2A submission with idempotency key and custom JSON encoder |
+| Node | Function | Responsibility |
+|------|----------|---------------|
+| `receive` | `receive_case()` | Initialize investigation, set status to IN_PROGRESS |
+| `analyze` | `analyze_graph()` | Fetch GraphFragment from Green Agent, build MultiDiGraph |
+| `detect` | `detect_typology()` | Run structuring (BFS) and layering (DFS) on all nodes |
+| `synthesize` | `synthesize_evidence()` | Cross-reference text evidence with ledger via spaCy NER + regex |
+| `compute_confidence` | `compute_confidence()` | Score computation BEFORE SAR generation; gate on threshold |
+| `draft` | `draft_sar()` | LLM Five Ws narrative with prompt injection sanitization |
+| `validate` | `validate_sar()` | Verify every cited entity/amount/timestamp exists in graph |
+| `submit` | `submit_result()` | A2A submission with idempotency key and custom JSON encoder |
 
 **Conditional edges:**
 
 - `compute_confidence` --> `submit`: When `confidence_score < CONFIDENCE_THRESHOLD` (default 0.5), set typology to `NONE`, skip SAR, return `LOW_CONFIDENCE` result.
-- `validate_sar` --> `draft_sar`: When validation fails and `retry_count < SAR_MAX_RETRY`, retry.
-- `validate_sar` --> `submit`: When validation passes, OR when `retry_count >= SAR_MAX_RETRY` (generate mechanical SAR from f-string template -- NEVER submit empty/malformed SAR).
+- `validate` --> `draft`: When validation fails and `retry_count < SAR_MAX_RETRY`, retry.
+- `validate` --> `submit`: When validation passes, OR when `retry_count >= SAR_MAX_RETRY` (generate mechanical SAR from f-string template -- NEVER submit empty/malformed SAR).
 
 ---
 
@@ -237,34 +237,40 @@ Every node in the decision loop reads from and writes to this state.
 
 ```python
 class InvestigationState(TypedDict):
+    """Typed state dict for the investigation pipeline.
+
+    v9.0 [P5v9-09]: MINIMAL OPERATIONAL SUBSET of Architecture S5.
+    Architecture S5 fields like graph, transactions, nodes, text_evidence,
+    ground_truth_criminals, structuring_results, layering_results,
+    evidence_results are carried INSIDE composite dicts (graph_fragment,
+    detection_results, evidence_package) rather than as top-level fields.
+
+    confidence_score: float (NOT Decimal -- probability [0,1], not currency).
+    """
     case_id: str                         # Unique investigation identifier
     subject_id: str                      # Entry point node ID
     jurisdiction: str                    # "fincen" or "fiu_ind"
     hop_depth: int                       # From InvestigationRequest, flows to DFS max_depth
-    graph_fragment: dict | None          # Deserialized GraphFragment
-    graph: nx.MultiDiGraph               # Built from protobuf GraphFragment
-    transactions: list[dict]             # Raw transaction dicts (Decimal amounts)
-    nodes: dict[str, dict]               # Node attributes by ID
-    text_evidence: list[dict]            # Unstructured evidence documents
-    ground_truth_criminals: list[str]    # For recall computation ONLY (not used in detection)
-    structuring_results: list[dict]      # From B2 heuristic
-    layering_results: list[dict]         # From B3 heuristic
-    evidence_results: list[dict]         # From B4 evidence synthesizer
+    graph_fragment: dict | None          # Deserialized GraphFragment (contains transactions, nodes, text_evidence, ground_truth_criminals)
     detected_typology: str | None        # STRUCTURING | LAYERING | BOTH | NONE
-    detection_results: dict | None       # Aggregated detection output
-    evidence_package: dict | None        # Synthesized evidence
-    sar_narrative: str | None             # Five Ws narrative text (None until drafted, reset to None on validation retry)
+    detection_results: dict | None       # Aggregated detection output (contains structuring_results, layering_results)
+    evidence_package: dict | None        # Synthesized evidence (contains evidence_results)
+    sar_narrative: str | None            # Five Ws narrative text (None until drafted, reset to None on validation retry)
     sar_draft: dict | None               # Serialized SARDraft
     validation_result: dict | None       # SAR validation outcome
-    typology_detected: str               # Final typology string
     involved_entities: list[str]         # ALL detected criminal nodes (SORTED)
     confidence_score: float              # Computed in step 6 (float, NOT Decimal)
-    investigation_start_timestamp: int    # Set in ingest: int(time.time())
+    investigation_start_timestamp: int   # Set in receive: int(time.time())
     investigation_timestamp: int         # Set at submit: int(time.time())
-    retry_count: int                     # SAR validation retry counter
     status: str                          # "PENDING" | "IN_PROGRESS" | "COMPLETE" | "FAILED"
+    retry_count: int                     # SAR validation retry counter
     error_message: str | None            # Set on failure, None otherwise
 ```
+
+**Design note:** Fields like `graph`, `transactions`, `nodes`, `text_evidence`, `ground_truth_criminals`,
+`structuring_results`, `layering_results`, and `evidence_results` are NOT top-level state fields.
+They are carried inside the composite dicts (`graph_fragment`, `detection_results`, `evidence_package`)
+to keep the LangGraph state surface minimal and avoid field sprawl.
 
 ---
 
@@ -510,7 +516,7 @@ Circuit breaker state machine:
 | Constant | Default | Env Var | Description |
 |----------|---------|---------|-------------|
 | `SAR_MAX_RETRY` | `3` | `SAR_MAX_RETRY` | Max SAR validation retries |
-| `SAR_LLM_MODEL` | `"gpt-4o-mini"` | `SAR_LLM_MODEL` | LLM model identifier |
+| `SAR_LLM_MODEL` | `"gpt-4.1"` | `SAR_LLM_MODEL` | LLM model identifier |
 | `SAR_LLM_TEMPERATURE` | `0.0` | `SAR_LLM_TEMPERATURE` | Greedy decoding |
 | `SAR_LLM_SEED` | `42` | `SAR_LLM_SEED` | Deterministic seed |
 | `SAR_MAX_NARRATIVE_CHARS` | `10000` | `SAR_MAX_NARRATIVE_CHARS` | Narrative length cap |
@@ -818,11 +824,8 @@ Exception
 - `protos/*_pb2.py` committed (no build-time `protoc` needed)
 - `.dockerignore` excludes: `.git`, `tests`, `scripts`, `.env`, `*.md` (except `requirements.txt`)
 
-> **Note:** The current `Dockerfile` uses `python:3.10-slim` and targets the
-> baseline agent. It requires upgrade to match the spec above (Python 3.11+,
-> TCMalloc, non-root user, `PYTHONHASHSEED=0`, spaCy model download).
->
-> NOTE: This note will be removed by D5 after D2 upgrades the Dockerfile.
+The production Dockerfile uses `python:3.11-slim` with TCMalloc, non-root user
+(`agent`, UID 1000), `PYTHONHASHSEED=0`, and spaCy model pre-downloaded at build time.
 
 ### ralph.sh (Entrypoint)
 

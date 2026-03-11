@@ -416,10 +416,13 @@ class SARDrafter:
                     if entity_ref not in graph_node_ids:
                         errors.append(f"Hallucinated entity in WHO: '{entity_ref}' not in graph")
 
-            # Layer 2 (v9.0): Full narrative word-boundary scan
-            # Build prefix families from known node IDs to detect hallucinated variants
+            # Layer 2 (v9.0 / v12.0 FIX): Full narrative word-boundary scan.
+            # Build prefix families ONLY for non-numeric node IDs to avoid
+            # false positives on dates, amounts, and other numbers in narrative.
             prefix_families: dict[str, set[str]] = {}
             for nid in graph_node_ids:
+                if nid.isdigit():
+                    continue
                 for i in range(len(nid) - 1, 0, -1):
                     if nid[i - 1] == '_' or (nid[i - 1].isalpha() and nid[i].isdigit()):
                         prefix = nid[:i]
