@@ -1,7 +1,7 @@
 """
-Validation script to verify complete Green Financial Crime Agent system.
+Validation script to verify complete ARGUS Forge Agent system.
 
-The Panopticon Protocol: Zero-Failure Synthetic Financial Crime Simulator
+ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 
 This script validates:
 1. Project structure (all required files present)
@@ -269,8 +269,8 @@ def validate_generation() -> bool:
 def main():
     """Run all validation checks."""
     print("\n" + "=" * 60)
-    print("  GREEN FINANCIAL CRIME AGENT - SYSTEM VALIDATION")
-    print("  The Panopticon Protocol")
+    print("  ARGUS FORGE AGENT - SYSTEM VALIDATION")
+    print("  ARGUS")
     print("=" * 60)
     
     checks = [

@@ -1,11 +1,11 @@
-# Green Financial Crime Agent - Docker Compose Configuration
-# The Panopticon Protocol: Zero-Failure Synthetic Financial Crime Simulator
+# ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
+# Docker Compose Configuration
 #
 # Usage:
 #   docker-compose up --build              # Build and start all services
 #   docker-compose up -d                   # Start in detached mode
-#   docker-compose logs -f green-agent     # View Green Agent logs
-#   docker-compose run purple-agent        # Run Purple Agent investigation
+#   docker-compose logs -f forge           # View Forge Agent logs
+#   docker-compose run tracer              # Run Tracer Agent investigation
 #   docker-compose down                    # Stop and remove containers
 #
 # Reproducibility:
@@ -14,14 +14,14 @@
 
 services:
   # ==========================================================================
-  # GREEN AGENT - Data Generator (Server)
+  # FORGE AGENT - Data Generator (Server)
   # ==========================================================================
-  green-agent:
-    image: praneshrajan15/green-financial-crime-agent:latest
+  forge:
+    image: praneshrajan15/argus-forge:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: green-financial-crime-agent
+    container_name: argus-forge
     ports:
       - "8000:8000"
     volumes:
@@ -49,26 +49,26 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - agent-network
+      - argus-network
 
   # ==========================================================================
-  # PURPLE AGENT - Baseline Investigator (Client)
+  # TRACER AGENT - Baseline Investigator (Client)
   # ==========================================================================
-  purple-agent:
+  tracer:
     build:
       context: ./purple_agent
       dockerfile: Dockerfile
-    container_name: purple-baseline-agent
+    container_name: argus-tracer
     depends_on:
-      green-agent:
+      forge:
         condition: service_healthy
     environment:
-      - GREEN_AGENT_URL=http://green-agent:8000
-      - PARTICIPANT_ID=${PARTICIPANT_ID:-baseline_purple_agent}
+      - FORGE_URL=http://forge:8000
+      - PARTICIPANT_ID=${PARTICIPANT_ID:-baseline_tracer_agent}
       - PYTHONUNBUFFERED=1
     networks:
-      - agent-network
-    # Purple agent runs once and exits
+      - argus-network
+    # Tracer agent runs once and exits
     restart: "no"
 
   # ==========================================================================
@@ -94,12 +94,12 @@ services:
       --runs ${RUNS:-3}
       --output /mnt/user-data/results/reproducibility_results.json
     networks:
-      - agent-network
+      - argus-network
     profiles:
       - reproducibility
     restart: "no"
 
 networks:
-  agent-network:
+  argus-network:
     driver: bridge
-    name: panopticon-network
+    name: argus-network

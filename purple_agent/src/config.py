@@ -1,5 +1,5 @@
 """
-Configuration Constants -- Purple Agent v7.0
+Configuration Constants -- Tracer Agent v7.0
 PRD Reference: All Tasks
 CRITICAL: ALL monetary thresholds are Decimal. NEVER float.
 
@@ -111,7 +111,7 @@ REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT", "30.0"))
 # ═══════════════════════════════════════════════════════════════════
 # A2A PROTOCOL
 # ═══════════════════════════════════════════════════════════════════
-GREEN_AGENT_URL = os.getenv("GREEN_AGENT_URL", "http://localhost:9090")
+FORGE_URL = os.getenv("FORGE_URL", "http://localhost:9090")
 PROTOBUF_CONTENT_TYPE = "application/x-protobuf"
 JSON_CONTENT_TYPE = "application/json"
 A2A_SERVER_HOST = os.getenv("A2A_SERVER_HOST", "0.0.0.0")

@@ -1,5 +1,5 @@
-# Green Financial Crime Agent - Progress Log
-# The Panopticon Protocol
+# ARGUS Forge Agent - Progress Log
+# ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 # ============================================================================
 
 # Format: [TIMESTAMP] [ITERATION] [TASK_ID] [STATUS] - Description

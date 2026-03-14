@@ -1,5 +1,5 @@
 """
-A2A Client -- Protobuf-enabled communication with Green Agent
+A2A Client -- Protobuf-enabled communication with Forge Agent
 PRD Reference: Task A4
 
 v12.0 FIXES:
@@ -34,7 +34,7 @@ from src.config import (
     CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     CIRCUIT_BREAKER_WINDOW_SECONDS,
     PROTOBUF_CONTENT_TYPE,
-    GREEN_AGENT_URL,
+    FORGE_URL,
     REQUEST_TIMEOUT_SECONDS,
     IDEMPOTENCY_HASH_ALGO,
 )
@@ -293,10 +293,10 @@ def _protobuf_to_dict(fragment: Any) -> dict[str, Any]:
 
 
 class A2AClient:
-    """Communicates with Green Agent via A2A protocol."""
+    """Communicates with Forge Agent via A2A protocol."""
 
-    def __init__(self, green_agent_url: str = GREEN_AGENT_URL) -> None:
-        self.green_agent_url = green_agent_url
+    def __init__(self, forge_url: str = FORGE_URL) -> None:
+        self.forge_url = forge_url
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=CIRCUIT_BREAKER_FAILURE_THRESHOLD,
             window_seconds=CIRCUIT_BREAKER_WINDOW_SECONDS,
@@ -330,7 +330,7 @@ class A2AClient:
             except CircuitBreakerOpen as e:
                 logger.error(
                     "Circuit breaker is OPEN on attempt %d/%d. "
-                    "All communication with Green Agent is halted. Error: %s",
+                    "All communication with Forge Agent is halted. Error: %s",
                     attempt + 1, max_attempts, e,
                 )
                 raise
@@ -349,12 +349,12 @@ class A2AClient:
     async def fetch_graph(
         self, subject_id: str, hop_depth: int = 3
     ) -> dict[str, Any]:
-        """Fetch graph fragment from Green Agent."""
+        """Fetch graph fragment from Forge Agent."""
         client = await self._get_client()
 
         async def _do_fetch() -> dict[str, Any]:
             response = await client.post(
-                f"{self.green_agent_url}/a2a",
+                f"{self.forge_url}/a2a",
                 content=pb2.InvestigationRequest(
                     subject_id=subject_id, hop_depth=hop_depth,
                 ).SerializeToString(),
@@ -389,7 +389,7 @@ class A2AClient:
 
         async def _do_submit() -> dict[str, Any]:
             response = await client.post(
-                f"{self.green_agent_url}/results",
+                f"{self.forge_url}/results",
                 json=result,
                 headers={"X-Idempotency-Key": idempotency_key},
             )

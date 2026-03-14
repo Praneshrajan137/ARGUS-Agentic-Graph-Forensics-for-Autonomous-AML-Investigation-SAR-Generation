@@ -1,6 +1,6 @@
-# Purple Agent -- Architecture Document
+# Tracer Agent -- Architecture Document
 
-> **Project Gamma | The Panopticon Protocol**
+> **Project Gamma | ARGUS**
 > **Spec Version:** v12.0 (`.cursorrules` definitive -- all v6.x through v11.x defects pre-resolved)
 > **Agent Version:** 7.1.0 (`config.py` / `agent.json`)
 > **Python:** 3.11+ required (`X | None` union syntax, `tomllib`, etc.)
@@ -30,12 +30,12 @@
 
 ## 1. Mission and Zero-Failure Mandate
 
-**Status:** Green Agent (Phase 1, data generator) COMPLETE. Purple Agent IN PROGRESS.
+**Status:** Forge Agent (Phase 1, data generator) COMPLETE. Tracer Agent IN PROGRESS.
 
-Purple Agent is an autonomous forensic financial crime investigator that:
+Tracer Agent is an autonomous forensic financial crime investigator that:
 
 1. Serves an A2A endpoint (FastAPI `:8080`) to receive investigation requests
-2. Fetches data from Green Agent (`:9090`) via A2A/Protobuf (binary payloads)
+2. Fetches data from Forge Agent (`:9090`) via A2A/Protobuf (binary payloads)
 3. Traverses financial graphs using NetworkX `MultiDiGraph` (BFS + iterative DFS)
 4. Detects **Structuring** (fan-in \$9K--\$9.8K USD / 9L--9.8L INR) and **Layering** (2--5% decay chains)
 5. Synthesizes unstructured text evidence using spaCy NER + regex (ledger = ground truth)
@@ -65,7 +65,7 @@ The target is **ZERO**.
 
 ```mermaid
 graph TB
-    subgraph PurpleAgent["PURPLE AGENT (FastAPI :8080)"]
+    subgraph PurpleAgent["Tracer Agent (FastAPI :8080)"]
         A2AServer["A2A Server\n(FastAPI)"]
         DecisionLoop["Decision Loop\n(LangGraph, 8 nodes)"]
         GraphReasoner["Graph Reasoner\n(MultiDiGraph)"]
@@ -76,7 +76,7 @@ graph TB
         Validator["Validator\n(Zero Hallucination)"]
     end
 
-    subgraph GreenAgent["GREEN AGENT (:9090)"]
+    subgraph GreenAgent["Forge Agent (:9090)"]
         GreenCore["God of Chaos\nWorld Simulator\nGaussian Copula\nBarabasi-Albert\nLocale Alignment"]
     end
 
@@ -117,7 +117,7 @@ stateDiagram-v2
 | Node | Function | Responsibility |
 |------|----------|---------------|
 | `receive` | `receive_case()` | Initialize investigation, set status to IN_PROGRESS |
-| `analyze` | `analyze_graph()` | Fetch GraphFragment from Green Agent, build MultiDiGraph |
+| `analyze` | `analyze_graph()` | Fetch GraphFragment from Forge Agent, build MultiDiGraph |
 | `detect` | `detect_typology()` | Run structuring (BFS) and layering (DFS) on all nodes |
 | `synthesize` | `synthesize_evidence()` | Cross-reference text evidence with ledger via spaCy NER + regex |
 | `compute_confidence` | `compute_confidence()` | Score computation BEFORE SAR generation; gate on threshold |
@@ -139,7 +139,7 @@ Each investigation follows these steps:
 
 ### Step 1: Receive Request
 
-Green Agent sends `InvestigationRequest` (protobuf) to Purple `:8080`.
+Forge Agent sends `InvestigationRequest` (protobuf) to Purple `:8080`.
 Contains: `subject_id`, `case_id`, `hop_depth`, `jurisdiction`.
 
 ### Step 2: Fetch Graph
@@ -222,7 +222,7 @@ Range: \[0.0, 1.0\], clamped via `min()`. Type is `float` (NOT `Decimal` -- it i
 
 ### Step 8: Submission
 
-A2A Client submits `InvestigationResult` to Green Agent:
+A2A Client submits `InvestigationResult` to Forge Agent:
 
 - Idempotency key: `SHA-256(case_id + typology + sorted(involved_entities))`
 - `investigation_timestamp` set to `int(time.time())` at submit moment
@@ -279,7 +279,7 @@ to keep the LangGraph state surface minimal and avoid field sprawl.
 All files are present in the repository and marked **[EXISTS]**.
 
 ```
-purple_agent/
+tracer_agent/
 +-- agent.json                    [EXISTS]  A2A agent card (capabilities, endpoints)
 +-- scenario.toml                 [EXISTS]  Scenario configuration
 +-- Dockerfile                    [EXISTS]  Container definition (requires upgrade to spec)
@@ -343,8 +343,8 @@ purple_agent/
 ## 7. Protobuf Contract
 
 `financial_crime.proto` defines 7 message types for A2A communication.
-This proto is **SHARED** with Green Agent (Phase 1, COMPLETE).
-The schema is **FROZEN** -- changes would break the Green Agent contract.
+This proto is **SHARED** with Forge Agent (Phase 1, COMPLETE).
+The schema is **FROZEN** -- changes would break the Forge Agent contract.
 
 **KEY CONSTRAINT:** `Transaction.amount` is `double` in proto. Python code MUST
 convert at the boundary: `Decimal(str(proto_tx.amount))`. Do NOT use
@@ -505,9 +505,9 @@ Circuit breaker state machine:
 
 | Constant | Default | Env Var | Description |
 |----------|---------|---------|-------------|
-| `GREEN_AGENT_URL` | `"http://localhost:9090"` | `GREEN_AGENT_URL` | Green Agent base URL |
-| `A2A_SERVER_HOST` | `"0.0.0.0"` | `A2A_SERVER_HOST` | Purple Agent bind host |
-| `A2A_SERVER_PORT` | `8080` | `A2A_SERVER_PORT` | Purple Agent bind port |
+| `forge_agent_URL` | `"http://localhost:9090"` | `forge_agent_URL` | Forge Agent base URL |
+| `A2A_SERVER_HOST` | `"0.0.0.0"` | `A2A_SERVER_HOST` | Tracer Agent bind host |
+| `A2A_SERVER_PORT` | `8080` | `A2A_SERVER_PORT` | Tracer Agent bind port |
 | `PROTOBUF_CONTENT_TYPE` | `"application/x-protobuf"` | -- | Content type header |
 | `JSON_CONTENT_TYPE` | `"application/json"` | -- | Content type header |
 
@@ -989,7 +989,7 @@ exactly \$10,000+.
 
 ### Why Proto `double` Amount and Not `string`
 
-Green Agent proto is FROZEN (Phase 1 complete, shared schema).
+Forge Agent proto is FROZEN (Phase 1 complete, shared schema).
 `Decimal(str(proto_tx.amount))` at the Python boundary is correct.
 No quantize at ingestion -- preserve full precision for arithmetic.
 

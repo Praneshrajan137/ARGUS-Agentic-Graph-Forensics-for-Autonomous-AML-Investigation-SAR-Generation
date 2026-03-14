@@ -1,5 +1,5 @@
 # Product Requirements Document
-## Green Financial Crime Agent - The Panopticon Protocol
+## ARGUS Forge Agent
 
 **Version**: 1.0  
 **Status**: Draft  
@@ -11,11 +11,11 @@
 
 ### 1.1 Project Overview
 
-**Project Name**: Green Financial Crime Agent  
-**Codename**: The Panopticon Protocol  
+**Project Name**: ARGUS Forge Agent  
+**Codename**: ARGUS  
 **Mission**: Zero-Failure Synthetic Financial Crime Simulator
 
-The Green Financial Crime Agent is the world's first true financial crime simulator, designed to generate mathematically consistent synthetic economies with surgically injected money laundering typologies. This system produces labeled training data for the Purple Agent (investigation/detection AI) without exposing real financial data or compromising privacy.
+The ARGUS Forge Agent is the world's first true financial crime simulator, designed to generate mathematically consistent synthetic economies with surgically injected money laundering typologies. This system produces labeled training data for the Tracer Agent (investigation/detection AI) without exposing real financial data or compromising privacy.
 
 ### 1.2 Objectives
 
@@ -68,7 +68,7 @@ Without high-quality synthetic training data:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    GREEN FINANCIAL CRIME AGENT                       │
+│                    ARGUS FORGE AGENT                           │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐          │
@@ -303,7 +303,7 @@ def test_layering_monotonic_decrease():
 
 **As** the system  
 **I need to** expose data via Agent2Agent protocol  
-**So that** the Purple Agent can consume the synthetic data
+**So that** the Tracer Agent can consume the synthetic data
 
 #### Acceptance Criteria
 
@@ -319,7 +319,7 @@ def test_layering_monotonic_decrease():
 ```python
 # Agent Manifest (agent.json)
 {
-    "name": "green-financial-crime-agent",
+    "name": "argus-forge",
     "version": "0.1.0",
     "description": "Synthetic financial crime data generator",
     "capabilities": [

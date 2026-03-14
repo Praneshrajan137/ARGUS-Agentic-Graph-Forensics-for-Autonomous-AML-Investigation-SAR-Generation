@@ -1,5 +1,5 @@
 {
-    "name": "Project_Gamma_Purple_Hunter",
+    "name": "argus-tracer",
     "version": "7.0.0",
     "description": "An autonomous forensic investigator agent capable of graph traversal, multi-modal evidence synthesis, and FinCEN/FIU-IND compliant SAR drafting with zero hallucination tolerance, confidence-gated SAR filing, and idempotent submission.",
     "capabilities": [
@@ -10,7 +10,7 @@
     ],
     "communication": {
         "protocol": "a2a",
-        "endpoint": "http://purple-agent:8080/a2a",
+        "endpoint": "http://tracer:8080/a2a",
         "content_types": ["protobuf", "json"],
         "health_check": "/health"
     },

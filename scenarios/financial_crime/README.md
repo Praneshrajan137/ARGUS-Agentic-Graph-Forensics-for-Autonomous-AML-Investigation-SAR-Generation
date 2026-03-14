@@ -1,5 +1,5 @@
 # Financial Crime Investigation Platform
-## The Panopticon Protocol
+## ARGUS
 
 **Status:** Production Ready  
 **Version:** 1.0.0
@@ -37,17 +37,17 @@ cd scenarios/financial_crime/
 # Build agents
 docker-compose build
 
-# Start Green Agent (server)
-docker-compose up green_agent
+# Start Forge Agent (server)
+docker-compose up forge_agent
 
-# In another terminal, run Purple Agent (investigator)
-docker-compose run purple_agent
+# In another terminal, run Tracer Agent (investigator)
+docker-compose run tracer_agent
 ```
 
 ### Manual Setup (Without Docker)
 
 ```bash
-# Install Green Agent
+# Install Forge Agent
 pip install -r requirements.txt
 
 # Generate synthetic data (difficulty 5)
@@ -56,8 +56,8 @@ python main.py generate --difficulty 5 --output-dir ./outputs
 # Start A2A server
 python main.py serve
 
-# In another terminal, run baseline purple agent
-cd purple_agent/
+# In another terminal, run baseline Tracer Agent
+cd tracer_agent/
 pip install -r requirements.txt
 python src/baseline_agent.py --nodes 0 42 100
 ```
@@ -66,7 +66,7 @@ python src/baseline_agent.py --nodes 0 42 100
 
 ## Architecture
 
-### Green Agent (The God of Chaos)
+### Forge Agent (The God of Chaos)
 
 **Purpose:** Generate forensic reality
 
@@ -81,12 +81,12 @@ python src/baseline_agent.py --nodes 0 42 100
 1. **Structuring** - 20 sources -> 1 mule, $9k-$9.8k each, <48hrs
 2. **Layering** - Chain transfers with 2-5% decay, no cycles
 
-### Purple Agent (The Baseline)
+### Tracer Agent (The Baseline)
 
 **Purpose:** Demonstrate the platform is functional
 
 **Logic:**
-1. Connect to Green Agent A2A interface
+1. Connect to Forge Agent A2A interface
 2. Query transactions for suspect nodes
 3. Apply simple heuristic (count incoming edges)
 4. Return verdict
@@ -114,7 +114,7 @@ python src/baseline_agent.py --nodes 0 42 100
 
 ## API Reference
 
-### A2A Tools (Purple Agent -> Green Agent)
+### A2A Tools (Tracer Agent -> Forge Agent)
 
 #### `POST /a2a/tools/get_transactions`
 ```json
@@ -175,7 +175,7 @@ python src/baseline_agent.py --nodes 0 42 100
 
 ## Evaluation Rubric
 
-Purple Agents are scored on:
+Tracer Agents are scored on:
 
 1. **Pattern Identification** (28%) - Precision/Recall/F1
 2. **Evidence Quality** (20%) - Use of transaction data
@@ -194,9 +194,9 @@ Purple Agents are scored on:
 ## File Structure
 
 ```
-project_root/                           # Green Agent lives at root
+project_root/                           # Forge Agent lives at root
 ├── main.py                             # CLI entry point
-├── Dockerfile                          # Green Agent Docker config
+├── Dockerfile                          # Forge Agent Docker config
 ├── requirements.txt                    # Python dependencies
 ├── src/
 │   ├── core/
@@ -208,7 +208,7 @@ project_root/                           # Green Agent lives at root
 │   └── utils/
 │       └── validators.py
 ├── tests/                              # Test suite (90%+ coverage)
-├── purple_agent/                       # Baseline investigator
+├── tracer_agent/                       # Baseline investigator
 │   ├── src/
 │   │   └── baseline_agent.py           # Simple heuristic
 │   ├── Dockerfile
@@ -245,7 +245,7 @@ project_root/                           # Green Agent lives at root
 
 1. **Needle in Haystack** - 1,000 documents, 3 contain clues
 2. **Additional Crime Types** - Round-tripping, trade-based ML
-3. **Multi-agent Networks** - Green agents talk to each other
+3. **Multi-agent Networks** - Forge Agents talk to each other
 4. **Real-time Streaming** - WebSocket interface
 5. **Neo4j Export** - Graph database integration
 
@@ -267,6 +267,6 @@ MIT License - See LICENSE file for details.
 
 ## Contact
 
-**Author:** The Panopticon Team  
-**Version:** 1.0.0 - The Panopticon Protocol  
+**Author:** The argus Team  
+**Version:** 1.0.0 - ARGUS  
 **Status:** Production Ready

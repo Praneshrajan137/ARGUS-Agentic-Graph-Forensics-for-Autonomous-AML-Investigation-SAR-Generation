@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Panopticon Protocol is a Zero-Failure Synthetic Financial Crime Simulator designed to generate mathematically consistent economies with surgically injected money laundering typologies.
+ARGUS is a Zero-Failure Synthetic Financial Crime Simulator designed to generate mathematically consistent economies with surgically injected money laundering typologies.
 
 ## System Architecture
 
@@ -14,7 +14,7 @@ The Panopticon Protocol is a Zero-Failure Synthetic Financial Crime Simulator de
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────┐                          ┌─────────────────┐          │
-│  │  Purple Agent   │◄────── A2A Protocol ────►│   Green Agent   │          │
+│  │  Tracer Agent   │◄────── A2A Protocol ────►│   Forge Agent   │          │
 │  │    (Client)     │        HTTP/JSON-RPC     │    (Server)     │          │
 │  └─────────────────┘                          └─────────────────┘          │
 │         │                                            │                      │
@@ -88,7 +88,7 @@ The Panopticon Protocol is a Zero-Failure Synthetic Financial Crime Simulator de
 
 ### 3. A2A Interface (`src/core/a2a_interface.py`)
 
-**Purpose**: Expose data via Agent2Agent protocol for Purple Agent integration.
+**Purpose**: Expose data via Agent2Agent protocol for Tracer Agent integration.
 
 **Input**: HTTP/JSON-RPC requests
 
@@ -245,7 +245,7 @@ The Ralph Wiggum pattern prevents context rot through iterative execution cycles
 ## Directory Structure
 
 ```
-green-agent/
+forge/
 ├── .cursor/rules/           # Cursor agent guidance rules
 ├── .claude/skills/          # Claude skill definitions
 │   ├── financial-crime/

@@ -1,10 +1,10 @@
-# scenarios/financial_crime/green_agent/sidecar/Cargo.toml
+# scenarios/financial_crime/forge_agent/sidecar/Cargo.toml
 
 [package]
-name = "green-agent-sidecar"
+name = "forge-sidecar"
 version = "1.0.0"
 edition = "2021"
-authors = ["Panopticon Protocol Team"]
+authors = ["ARGUS Team"]
 
 [dependencies]
 # Async runtime

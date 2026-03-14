@@ -62,7 +62,7 @@ def _get_workflow() -> Any:
 async def health_check() -> dict[str, str]:
     return {
         "status": "healthy",
-        "service": "purple_agent",
+        "service": "tracer_agent",
         "version": AGENT_VERSION,
     }
 

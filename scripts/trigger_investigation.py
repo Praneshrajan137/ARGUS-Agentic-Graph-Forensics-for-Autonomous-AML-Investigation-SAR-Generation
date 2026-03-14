@@ -1,12 +1,12 @@
 """
-E2E Investigation Trigger -- Send real AML investigations to Purple Agent.
+E2E Investigation Trigger -- Send real AML investigations to Tracer Agent.
 
 Stdlib-only (runs on any Python 3.10+). No external dependencies.
 
 Usage:
     python scripts/trigger_investigation.py
-    python scripts/trigger_investigation.py --purple-url http://localhost:8080
-    python scripts/trigger_investigation.py --green-url http://localhost:8000
+    python scripts/trigger_investigation.py --tracer-url http://localhost:8080
+    python scripts/trigger_investigation.py --forge-url http://localhost:8000
 """
 import argparse
 import io
@@ -147,22 +147,22 @@ def print_result(result: dict, investigation: dict, gt_crimes: list) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Trigger E2E AML investigations")
-    parser.add_argument("--purple-url", default=PURPLE_URL, help="Purple Agent URL")
-    parser.add_argument("--green-url", default=GREEN_URL, help="Green Agent URL")
+    parser.add_argument("--tracer-url", default=PURPLE_URL, help="Tracer Agent URL")
+    parser.add_argument("--forge-url", default=GREEN_URL, help="Forge Agent URL")
     parser.add_argument("--timeout", type=int, default=HEALTH_TIMEOUT, help="Health check timeout (s)")
     args = parser.parse_args()
 
     print()
     print_separator("=")
     print("  E2E AML INVESTIGATION TRIGGER")
-    print(f"  Green Agent: {args.green_url}")
-    print(f"  Purple Agent: {args.purple_url}")
+    print(f"  Forge Agent: {args.forge_url}")
+    print(f"  Tracer Agent: {args.tracer_url}")
     print_separator("=")
     print()
 
     print("[1/4] Checking agent health...")
-    green_ok = wait_for_health("Green Agent", args.green_url, timeout=args.timeout)
-    purple_ok = wait_for_health("Purple Agent", args.purple_url, timeout=args.timeout)
+    green_ok = wait_for_health("Forge Agent", args.forge_url, timeout=args.timeout)
+    purple_ok = wait_for_health("Tracer Agent", args.tracer_url, timeout=args.timeout)
 
     if not green_ok or not purple_ok:
         print("\nFATAL: One or both agents are not healthy. Aborting.")
@@ -191,13 +191,13 @@ def main() -> None:
             "hop_depth": inv["hop_depth"],
             "jurisdiction": inv["jurisdiction"],
         }
-        print(f"      POST {args.purple_url}/a2a")
+        print(f"      POST {args.tracer_url}/a2a")
         print(f"      Payload: {json.dumps(payload)}")
 
         start = time.time()
         try:
             result = http_post_json(
-                f"{args.purple_url}/a2a", payload, timeout=INVESTIGATION_TIMEOUT
+                f"{args.tracer_url}/a2a", payload, timeout=INVESTIGATION_TIMEOUT
             )
             elapsed = time.time() - start
             print(f"      Completed in {elapsed:.1f}s")

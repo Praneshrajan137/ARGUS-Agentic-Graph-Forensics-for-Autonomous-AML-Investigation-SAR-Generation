@@ -1,9 +1,9 @@
 # ═══════════════════════════════════════════════════════════════════
-# Purple Agent -- Project Configuration v7.0
+# Tracer Agent -- Project Configuration v7.0
 # ═══════════════════════════════════════════════════════════════════
 
 [project]
-name = "purple-agent"
+name = "argus-tracer"
 version = "7.0.0"
 requires-python = ">=3.11"
 

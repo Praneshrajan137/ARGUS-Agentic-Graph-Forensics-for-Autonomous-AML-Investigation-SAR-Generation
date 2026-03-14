@@ -35,8 +35,8 @@ class TestHealthEndpoint:
         data = response.json()
         if data["status"] != "healthy":
             raise ValueError(f"Expected 'healthy', got {data['status']}")
-        if data["service"] != "purple_agent":
-            raise ValueError(f"Expected 'purple_agent', got {data['service']}")
+        if data["service"] != "tracer_agent":
+            raise ValueError(f"Expected 'tracer_agent', got {data['service']}")
         if data["version"] != AGENT_VERSION:
             raise ValueError(f"Version mismatch: {data['version']}")
 

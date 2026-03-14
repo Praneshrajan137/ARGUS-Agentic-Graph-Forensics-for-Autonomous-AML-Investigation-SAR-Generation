@@ -1,13 +1,13 @@
 [scenario]
 name = "financial_crime"
-description = "Autonomous Financial Crime Detection -- The Panopticon Protocol v7.0"
+description = "Autonomous Financial Crime Detection -- ARGUS v7.0"
 
-[scenario.agents.green_agent]
+[scenario.agents.forge_agent]
 role = "data_generator"
 description = "God of Chaos -- generates synthetic financial ecosystems with embedded crime"
 port = 9090
 
-[scenario.agents.purple_agent]
+[scenario.agents.tracer_agent]
 role = "investigator"
 description = "The Hunter -- forensic graph reasoning + SAR generation"
 port = 8080

@@ -1,5 +1,5 @@
-# Green Financial Crime Agent v7.0 - Pinned Dependencies
-# The Panopticon Protocol: Zero-Failure Synthetic Financial Crime Simulator
+# ARGUS Forge Agent v7.0 - Pinned Dependencies
+# ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 # ALL versions are pinned for reproducible builds (no >= ranges).
 
 # =============================================================================

@@ -7,7 +7,7 @@ Runs multiple evaluations with fixed configuration to demonstrate reproducibilit
 This script:
 1. Generates synthetic financial crime data with a fixed seed
 2. Starts the A2A server
-3. Runs the baseline Purple Agent multiple times
+3. Runs the baseline Tracer Agent multiple times
 4. Collects and compares results
 5. Reports variance statistics
 
@@ -209,7 +209,7 @@ class BenchmarkRunner:
         
         try:
             # Import the baseline agent
-            sys.path.insert(0, str(PROJECT_ROOT / "purple_agent" / "src"))
+            sys.path.insert(0, str(PROJECT_ROOT / "tracer_agent" / "src"))
             
             # We need to simulate what the baseline agent does
             # Since we can't actually run HTTP requests without a server,

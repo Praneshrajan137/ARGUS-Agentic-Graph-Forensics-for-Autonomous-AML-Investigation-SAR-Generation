@@ -1,4 +1,4 @@
-# Purple Agent -- Ralph Wiggum Progress Log
+# Tracer Agent -- Ralph Wiggum Progress Log
 # Initialized: 2026-03-08T08:52:23Z
 # Format: [ISO-8601] Task <ID>: <status> -- <description>
 #

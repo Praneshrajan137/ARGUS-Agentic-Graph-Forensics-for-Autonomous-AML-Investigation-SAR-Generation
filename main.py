@@ -1,7 +1,7 @@
 """
-Main entry point for Green Financial Crime Agent.
+Main entry point for Forge Financial Crime Agent.
 
-The Panopticon Protocol: Zero-Failure Synthetic Financial Crime Simulator
+ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 
 Usage:
     python main.py generate --output-dir ./outputs
@@ -188,13 +188,13 @@ def start_server(host: str = "0.0.0.0", port: int = 9090, reload: bool = False) 
     
     Args:
         host: Host to bind to (default: 0.0.0.0)
-        port: Port to listen on (default: 9090, matching Purple Agent's GREEN_AGENT_URL)
+        port: Port to listen on (default: 9090, matching Tracer Agent's FORGE_URL)
         reload: Enable auto-reload for development
     """
     import uvicorn
     
     logger.info("=" * 60)
-    logger.info("Starting Green Financial Crime Agent A2A Server")
+    logger.info("Starting ARGUS Forge Agent A2A Server")
     logger.info("=" * 60)
     logger.info(f"  - Address: {host}:{port}")
     logger.info(f"  - API Docs: http://{host}:{port}/docs")
@@ -215,7 +215,7 @@ def start_server(host: str = "0.0.0.0", port: int = 9090, reload: bool = False) 
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Green Financial Crime Agent - Synthetic AML Data Generator",
+        description="ARGUS Forge Agent - Synthetic AML Data Generator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -285,7 +285,7 @@ Examples:
         "--port",
         type=int,
         default=9090,
-        help="Port to listen on (default: 9090, matching Purple Agent's GREEN_AGENT_URL)"
+        help="Port to listen on (default: 9090, matching Tracer Agent's FORGE_URL)"
     )
     serve_parser.add_argument(
         "--reload",

@@ -1,10 +1,10 @@
 """
-Baseline Purple Agent
+Baseline Tracer Agent
 =====================
 Minimal viable investigator that demonstrates the A2A protocol.
 
 This agent is intentionally SIMPLE. It:
-1. Connects to the Green Agent
+1. Connects to the Forge Agent
 2. Calls get_transactions for a few nodes
 3. Applies a simple heuristic (count incoming edges)
 4. Returns a verdict
@@ -24,15 +24,15 @@ logger = logging.getLogger(__name__)
 class BaselinePurpleAgent:
     """Simplest possible investigation agent."""
     
-    def __init__(self, green_agent_url: str = "http://localhost:8000", participant_id: str = "baseline_purple_agent"):
+    def __init__(self, forge_agent_url: str = "http://localhost:8000", participant_id: str = "baseline_tracer_agent"):
         """
-        Initialize with Green Agent URL.
+        Initialize with Forge Agent URL.
         
         Args:
-            green_agent_url: URL of the Green Agent A2A interface
+            forge_agent_url: URL of the Forge Agent A2A interface
             participant_id: Unique identifier for this agent
         """
-        self.base_url = green_agent_url
+        self.base_url = forge_agent_url
         self.participant_id = participant_id
         self.tool_calls = 0
         
@@ -44,7 +44,7 @@ class BaselinePurpleAgent:
     
     def get_transactions(self, account_id: str, limit: int = 100) -> List[Dict]:
         """
-        Call Green Agent's get_transactions tool.
+        Call Forge Agent's get_transactions tool.
         
         Args:
             account_id: Account ID to query
@@ -78,7 +78,7 @@ class BaselinePurpleAgent:
     
     def get_kyc_profile(self, account_id: str) -> Dict:
         """
-        Call Green Agent's get_kyc_profile tool.
+        Call Forge Agent's get_kyc_profile tool.
         
         Args:
             account_id: Account ID to query
@@ -106,7 +106,7 @@ class BaselinePurpleAgent:
     
     def get_connections(self, account_id: str) -> List[Dict]:
         """
-        Call Green Agent's get_account_connections tool.
+        Call Forge Agent's get_account_connections tool.
         
         Args:
             account_id: Account ID to query
@@ -134,7 +134,7 @@ class BaselinePurpleAgent:
     
     def get_evidence(self, keyword: Optional[str] = None, limit: int = 50) -> List[Dict]:
         """
-        Call Green Agent's get_evidence tool.
+        Call Forge Agent's get_evidence tool.
         
         Args:
             keyword: Optional keyword to search for
@@ -381,13 +381,13 @@ def main():
         epilog="""
 Examples:
     python baseline_agent.py --nodes 0 42 100
-    python baseline_agent.py --green-url http://localhost:8000 --nodes 0 1 2
+    python baseline_agent.py --forge-url http://localhost:8000 --nodes 0 1 2
         """
     )
     parser.add_argument(
-        "--green-url",
+        "--forge-url",
         default="http://localhost:8000",
-        help="Green Agent URL (default: http://localhost:8000)"
+        help="Forge Agent URL (default: http://localhost:8000)"
     )
     parser.add_argument(
         "--nodes",
@@ -397,22 +397,22 @@ Examples:
     )
     parser.add_argument(
         "--participant-id",
-        default="baseline_purple_agent",
-        help="Participant ID for tracking (default: baseline_purple_agent)"
+        default="baseline_tracer_agent",
+        help="Participant ID for tracking (default: baseline_tracer_agent)"
     )
     
     args = parser.parse_args()
     
     print("=" * 60)
-    print("BASELINE PURPLE AGENT - Simple Investigation")
+    print("BASELINE Tracer Agent - Simple Investigation")
     print("=" * 60)
-    print(f"Green Agent URL: {args.green_url}")
+    print(f"Forge Agent URL: {args.green_url}")
     print(f"Participant ID: {args.participant_id}")
     print(f"Nodes to investigate: {args.nodes}")
     print("=" * 60)
     
     agent = BaselinePurpleAgent(
-        green_agent_url=args.green_url,
+        forge_agent_url=args.green_url,
         participant_id=args.participant_id
     )
     
@@ -446,7 +446,7 @@ Examples:
         print(f"Efficiency: {assessment.get('efficiency_score', 0):.1f} ({assessment.get('efficiency_rank', 'unknown')})")
         print(f"\nFeedback:\n{assessment.get('feedback', 'No feedback available')}")
     else:
-        print("Failed to get assessment (Green Agent may need to load data first)")
+        print("Failed to get assessment (Forge Agent may need to load data first)")
     
     print("=" * 60)
 

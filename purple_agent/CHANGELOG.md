@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Purple Agent are documented in this file.
+All notable changes to Tracer Agent are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/).
 
@@ -55,9 +55,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - Trigger script UTF-8 output encoding for Windows compatibility
 
 ### Documentation
-- Rewrote `purple_agent/README.md`: corrected decision loop node names, added E2E section, updated health check format, updated config table
-- Updated `purple_agent/ARCHITECTURE.md`: v12.0 spec version, corrected all 8 node names to match implementation, aligned `InvestigationState` TypedDict with actual code, removed outdated Dockerfile note, updated SAR model
-- Overhauled root `README.md`: Python 3.11+ badge, Purple Agent v7.1 pipeline description, protobuf A2A architecture, E2E workflow, updated project structure
+- Rewrote `tracer_agent/README.md`: corrected decision loop node names, added E2E section, updated health check format, updated config table
+- Updated `tracer_agent/ARCHITECTURE.md`: v12.0 spec version, corrected all 8 node names to match implementation, aligned `InvestigationState` TypedDict with actual code, removed outdated Dockerfile note, updated SAR model
+- Overhauled root `README.md`: Python 3.11+ badge, Tracer Agent v7.1 pipeline description, protobuf A2A architecture, E2E workflow, updated project structure
 
 ## [Unreleased]
 

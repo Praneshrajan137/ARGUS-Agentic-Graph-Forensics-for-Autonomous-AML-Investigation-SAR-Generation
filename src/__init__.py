@@ -1,6 +1,6 @@
-# Green Financial Crime Agent - Source Package
+# ARGUS Forge Agent - Source Package
 """
-The Panopticon Protocol: Zero-Failure Synthetic Financial Crime Simulator
+ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 """
 
 __version__ = "7.0.0"

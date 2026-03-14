@@ -1,10 +1,10 @@
 """
-Structured Result Types -- Green Agent v8.0
+Structured Result Types -- Forge Agent v8.0
 ============================================
 Typed dataclasses for assessment results, replacing raw dicts.
 
 These types enforce type safety and make the assessment engine's outputs
-inspectable and testable. They mirror the Purple Agent's structured
+inspectable and testable. They mirror the Tracer Agent's structured
 result types (StructuringResult, LayeringResult, etc.) but from the
 *judge's* perspective -- scoring Purple's investigation quality.
 
@@ -24,8 +24,8 @@ from typing import List, Dict, Any
 class EntityMetrics:
     """Precision/Recall/F1 for entity identification.
 
-    Measures how well Purple Agent identified the criminal entities
-    from the ground truth injected by the Green Agent.
+    Measures how well Tracer Agent identified the criminal entities
+    from the ground truth injected by the Forge Agent.
     """
     true_positives: List[str] = field(default_factory=list)
     false_positives: List[str] = field(default_factory=list)
@@ -136,7 +136,7 @@ class TypologyScore:
 
 @dataclass
 class EfficiencyScore:
-    """Score based on Purple Agent's tool call count."""
+    """Score based on Tracer Agent's tool call count."""
     tool_call_count: int = 0
     tier: str = ""  # "excellent", "good", "fair", "poor"
     score: Decimal = Decimal("0")
@@ -148,7 +148,7 @@ class EfficiencyScore:
 
 @dataclass
 class AssessmentResult:
-    """Complete assessment of Purple Agent's investigation.
+    """Complete assessment of Tracer Agent's investigation.
 
     This is the top-level result returned by the assessment engine.
     It aggregates all sub-scores into a weighted final score.

@@ -1,4 +1,4 @@
-# E2E Investigation Override -- Purple Agent as FastAPI server
+# E2E Investigation Override -- Tracer Agent as FastAPI server
 #
 # Usage:
 #   docker-compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d
@@ -6,12 +6,12 @@
 #   docker-compose -f docker-compose.yml -f docker-compose.e2e.yml down
 
 services:
-  purple-agent:
-    container_name: purple-e2e-agent
+  tracer:
+    container_name: argus-tracer-e2e
     ports:
       - "8080:8080"
     environment:
-      - GREEN_AGENT_URL=http://green-agent:8000
+      - FORGE_URL=http://forge:8000
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PYTHONHASHSEED=0
       - PYTHONUNBUFFERED=1

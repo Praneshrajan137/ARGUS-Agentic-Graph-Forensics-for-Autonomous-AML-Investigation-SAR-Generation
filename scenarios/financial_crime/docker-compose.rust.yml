@@ -1,5 +1,5 @@
 # Alternative docker-compose.yml using Rust sidecar instead of Envoy
-# The Panopticon Protocol - High Performance Variant
+# ARGUS - High Performance Variant
 #
 # Use this for maximum performance (lower latency, smaller footprint)
 # Envoy version is preferred for production due to ecosystem support
@@ -8,13 +8,13 @@ version: '3.8'
 
 services:
   # ====================================================================
-  # GREEN AGENT: Python Application (INTERNAL)
+  # Forge Agent: Python Application (INTERNAL)
   # ====================================================================
-  green_agent_app:
+  forge_agent_app:
     build:
       context: ../..
-      dockerfile: scenarios/financial_crime/green_agent/Dockerfile
-    container_name: green-agent-app
+      dockerfile: scenarios/financial_crime/forge_agent/Dockerfile
+    container_name: forge-app
     expose:
       - "5000"
     networks:
@@ -25,8 +25,8 @@ services:
       - GENERATE_EVIDENCE=true
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./green_agent/outputs:/app/outputs
-      - ./green_agent/data:/app/data
+      - ./forge_agent/outputs:/app/outputs
+      - ./forge_agent/data:/app/data
     healthcheck:
       test: [ "CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:5000/health')" ]
       interval: 10s
@@ -39,42 +39,42 @@ services:
   # ====================================================================
   # RUST SIDECAR: High-Performance Proxy (EXTERNAL)
   # ====================================================================
-  green_agent_sidecar:
+  forge_agent_sidecar:
     build:
-      context: ./green_agent/sidecar
+      context: ./forge_agent/sidecar
       dockerfile: Dockerfile
-    container_name: green-agent-sidecar
+    container_name: forge-sidecar
     ports:
       - "8000:8000"
     networks:
       - agent_network
     depends_on:
-      green_agent_app:
+      forge_agent_app:
         condition: service_healthy
     environment:
       - RUST_LOG=info
-      - BACKEND_URL=http://green_agent_app:5000
+      - BACKEND_URL=http://forge_agent_app:5000
 
   # ====================================================================
-  # PURPLE AGENT: Baseline Investigator
+  # Tracer Agent: Baseline Investigator
   # ====================================================================
-  purple_agent:
+  tracer_agent:
     build:
-      context: ../../purple_agent
+      context: ../../tracer_agent
       dockerfile: Dockerfile
-    container_name: purple-agent-baseline
+    container_name: tracer-baseline
     networks:
       - agent_network
     depends_on:
-      - green_agent_sidecar
+      - forge_agent_sidecar
     environment:
-      - GREEN_AGENT_URL=http://green_agent_sidecar:8000
-      - PARTICIPANT_ID=${PARTICIPANT_ID:-baseline_purple_agent}
+      - forge_agent_URL=http://forge_agent_sidecar:8000
+      - PARTICIPANT_ID=${PARTICIPANT_ID:-baseline_tracer_agent}
       - PYTHONUNBUFFERED=1
-    command: [ "--green-url", "http://green_agent_sidecar:8000", "--participant-id", "${PARTICIPANT_ID:-baseline_purple_agent}", "--nodes", "0", "42", "100" ]
+    command: [ "--forge-url", "http://forge_agent_sidecar:8000", "--participant-id", "${PARTICIPANT_ID:-baseline_tracer_agent}", "--nodes", "0", "42", "100" ]
     restart: "no"
 
 networks:
   agent_network:
     driver: bridge
-    name: panopticon-network-rust
+    name: argus-network-rust

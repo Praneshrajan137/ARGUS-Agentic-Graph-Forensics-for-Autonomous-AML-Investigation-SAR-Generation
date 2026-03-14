@@ -1,10 +1,10 @@
 # ═══════════════════════════════════════════════════════════════
-# Purple Agent — Docker Compose (Development / Staging)
+# Tracer Agent — Docker Compose (Development / Staging)
 # Usage: docker compose up --build
 # ═══════════════════════════════════════════════════════════════
 
 services:
-  purple-agent:
+  tracer:
     build:
       context: .
       dockerfile: Dockerfile
@@ -14,7 +14,7 @@ services:
       - .env
     environment:
       - PYTHONHASHSEED=0
-      - GREEN_AGENT_URL=http://green-agent:9090
+      - FORGE_URL=http://forge:9090
       - LOG_LEVEL=INFO
       - LOG_JSON_FORMAT=true
     deploy:
@@ -38,10 +38,10 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  # Green Agent — upstream data source
-  # Uncomment and configure when Green Agent image is available
-  # green-agent:
-  #   image: green-agent:latest
+  # Forge Agent — upstream data source
+  # Uncomment and configure when Forge Agent image is available
+  # forge:
+  #   image: argus-forge:latest
   #   ports:
   #     - "9090:9090"
   #   deploy:

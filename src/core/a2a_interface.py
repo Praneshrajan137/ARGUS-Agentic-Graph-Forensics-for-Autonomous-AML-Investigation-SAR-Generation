@@ -416,7 +416,7 @@ async def get_manifest() -> AgentManifest:
 
 
 # =============================================================================
-# A2A Protocol Endpoints (Purple Agent contract)
+# A2A Protocol Endpoints (Tracer Agent contract)
 # =============================================================================
 
 def _datetime_to_epoch(dt: Any) -> int:
@@ -681,7 +681,7 @@ async def a2a_endpoint(http_request: Request):
 
 @app.post("/results")
 async def submit_results(http_request: Request):
-    """Receive investigation results from Purple Agent.
+    """Receive investigation results from Tracer Agent.
 
     Accepts JSON with X-Idempotency-Key header for deduplication.
     Stores results and returns acknowledgment.
@@ -1035,7 +1035,7 @@ async def get_evidence(request: GetEvidenceRequest) -> EvidenceListResponse:
     """
     Retrieve evidence documents (SARs, emails, receipts).
     
-    This is the "Sherlock Holmes" tool. The Purple Agent must:
+    This is the "Sherlock Holmes" tool. The Tracer Agent must:
     1. Read the documents to find entity IDs
     2. Extract the IDs
     3. Query the graph with those IDs

@@ -1,4 +1,4 @@
-# The Panopticon Protocol
+# ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 
 **A Zero-Failure Synthetic Financial Crime Investigation Platform**
 
@@ -9,7 +9,7 @@
 
 ## Abstract
 
-The Panopticon Protocol is a two-agent system for financial crime detection evaluation. A **Green Agent** generates synthetic financial transaction networks with surgically injected money laundering patterns, while a **Purple Agent** autonomously investigates those networks, detects structuring and layering typologies, and generates regulatory-compliant Suspicious Activity Reports (SARs).
+ARGUS is a two-agent system for financial crime detection evaluation. A **Forge Agent** generates synthetic financial transaction networks with surgically injected money laundering patterns, while a **Tracer Agent** autonomously investigates those networks, detects structuring and layering typologies, and generates regulatory-compliant Suspicious Activity Reports (SARs).
 
 The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffers over HTTP, enabling realistic end-to-end AML investigation workflows.
 
@@ -17,8 +17,8 @@ The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffe
 
 | Component | Role | Port | Technology |
 |-----------|------|------|------------|
-| **Green Agent** | World simulator, data generator, evaluator | `:8000` | NetworkX, SDV, Faker, FastAPI |
-| **Purple Agent** | Autonomous forensic investigator | `:8080` | LangGraph, spaCy, GPT-4.1, FastAPI |
+| **Forge Agent** | World simulator, data generator, evaluator | `:8000` | NetworkX, SDV, Faker, FastAPI |
+| **Tracer Agent** | Autonomous forensic investigator | `:8080` | LangGraph, spaCy, GPT-4.1, FastAPI |
 
 ### Key Capabilities
 
@@ -54,7 +54,7 @@ cd The-Agentic-Financial-Defense-Swarm-Forensic-AML-Graph-Reasoning-Engine
 # Set your OpenAI API key
 export OPENAI_API_KEY=sk-your-key-here
 
-# Start both agents (E2E mode: Purple Agent runs as FastAPI server)
+# Start both agents (E2E mode: Tracer Agent runs as FastAPI server)
 docker-compose -f docker-compose.yml -f docker-compose.e2e.yml up --build -d
 
 # Wait for both agents to become healthy
@@ -82,19 +82,19 @@ The trigger script sends investigation requests for known criminal nodes and rep
 # Build and run both agents
 docker-compose up --build
 
-# Green Agent starts on :8000, generates data, waits for connections
-# Purple Agent starts on :8080, runs the Ralph Wiggum task loop
+# Forge Agent starts on :8000, generates data, waits for connections
+# Tracer Agent starts on :8080, runs the Ralph Wiggum task loop
 ```
 
 ### Local Development
 
 ```bash
-# Green Agent
+# Forge Agent
 pip install -r requirements.txt
 python main.py generate --output-dir ./outputs --seed 42 --difficulty 5
 python main.py serve --port 8000
 
-# Purple Agent (separate terminal)
+# Tracer Agent (separate terminal)
 cd purple_agent
 cp .env.example .env   # Edit: set OPENAI_API_KEY
 pip install -r requirements.txt
@@ -108,11 +108,12 @@ PYTHONHASHSEED=0 python -m src.main
 
 ```
 +------------------------------------------------------------------+
-|                    THE PANOPTICON PROTOCOL                        |
+|                            ARGUS                                  |
+|   Agentic Graph Forensics for Autonomous AML Investigation       |
 +------------------------------------------------------------------+
 |                                                                   |
 |  +------------------------+         +---------------------------+ |
-|  |     GREEN AGENT        |         |      PURPLE AGENT         | |
+|  |     FORGE AGENT        |         |      TRACER AGENT         | |
 |  |    (World Simulator)   | Protobuf|   (Forensic Investigator) | |
 |  |                        | <-----> |                           | |
 |  |  - Graph Generator     |  A2A    |  - 8-Node LangGraph Loop  | |
@@ -126,12 +127,12 @@ PYTHONHASHSEED=0 python -m src.main
 +------------------------------------------------------------------+
 
 A2A Protocol Flow:
-  Purple  --[InvestigationRequest (protobuf)]--> Green
-  Green   --[GraphFragment (protobuf)]--------> Purple
-  Purple  --[InvestigationResult (protobuf)]--> Green
+  Tracer  --[InvestigationRequest (protobuf)]--> Forge
+  Forge   --[GraphFragment (protobuf)]---------> Tracer
+  Tracer  --[InvestigationResult (protobuf)]--> Forge
 ```
 
-### Purple Agent Decision Loop (8 Nodes)
+### Tracer Agent Decision Loop (8 Nodes)
 
 ```
 receive -> analyze -> detect -> synthesize -> compute_confidence
@@ -148,16 +149,16 @@ receive -> analyze -> detect -> synthesize -> compute_confidence
                                             submit  draft -> mechanical SAR -> submit
 ```
 
-### Green Agent Components
+### Forge Agent Components
 
 | Module | Purpose | Technology |
 |--------|---------|------------|
 | `graph_generator.py` | Scale-free financial networks | NetworkX, Faker, SDV |
 | `crime_injector.py` | Structuring and layering patterns | Difficulty-based obfuscation |
 | `evidence_generator.py` | SARs, emails, conflicting docs | NLU challenge generation |
-| `a2a_interface.py` | HTTP API for Purple Agents | FastAPI, Protobuf |
+| `a2a_interface.py` | HTTP API for Tracer Agents | FastAPI, Protobuf |
 
-### Purple Agent Components
+### Tracer Agent Components
 
 | Module | Purpose | Technology |
 |--------|---------|------------|
@@ -167,14 +168,14 @@ receive -> analyze -> detect -> synthesize -> compute_confidence
 | `heuristics/layering.py` | Chain DFS with decay analysis | Iterative DFS |
 | `evidence_synthesizer.py` | Text-ledger cross-reference | spaCy, regex |
 | `sar_drafter.py` | Five Ws narrative generation | GPT-4.1, mechanical fallback |
-| `a2a_client.py` | Green Agent communication | httpx, circuit breaker |
+| `a2a_client.py` | Forge Agent communication | httpx, circuit breaker |
 | `a2a_server.py` | Investigation endpoint | FastAPI |
 
 ---
 
 ## API Reference
 
-### Green Agent (`:8000`)
+### Forge Agent (`:8000`)
 
 All endpoints use JSON. Include `X-Participant-ID` header for efficiency tracking.
 
@@ -188,7 +189,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 | `/a2a/tools/get_account_connections` | POST | Get account connection graph |
 | `/a2a/investigation_assessment` | POST | Submit investigation for scoring |
 
-### Purple Agent (`:8080`)
+### Tracer Agent (`:8080`)
 
 | Endpoint | Method | Content-Type | Description |
 |----------|--------|-------------|-------------|
@@ -197,7 +198,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 | `/a2a` | POST | `application/x-protobuf` or `application/json` | Submit investigation request |
 | `/docs` | GET | HTML | OpenAPI documentation (Swagger UI) |
 
-**Purple Agent `/a2a` request (JSON):**
+**Tracer Agent `/a2a` request (JSON):**
 
 ```json
 {
@@ -208,7 +209,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 }
 ```
 
-**Purple Agent `/a2a` response fields:** `case_id`, `sar_narrative`, `typology_detected`, `involved_entities`, `confidence_score`, `jurisdiction`, `investigation_timestamp`, `status`.
+**Tracer Agent `/a2a` response fields:** `case_id`, `sar_narrative`, `typology_detected`, `involved_entities`, `confidence_score`, `jurisdiction`, `investigation_timestamp`, `status`.
 
 ---
 
@@ -216,13 +217,13 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 
 ```
 .
-+-- main.py                          Green Agent CLI entry point
-+-- Dockerfile                       Green Agent container
++-- main.py                          Forge Agent CLI entry point
++-- Dockerfile                       Forge Agent container
 +-- docker-compose.yml               Multi-agent orchestration
-+-- docker-compose.e2e.yml           E2E override (Purple as FastAPI server)
-+-- requirements.txt                 Green Agent dependencies
++-- docker-compose.e2e.yml           E2E override (Tracer as FastAPI server)
++-- requirements.txt                 Forge Agent dependencies
 +-- scenario.toml                    Scenario configuration
-+-- src/                             Green Agent source
++-- src/                             Forge Agent source
 |   +-- core/
 |   |   +-- graph_generator.py       NetworkX + SDV network generation
 |   |   +-- crime_injector.py        Structuring and layering injection
@@ -231,7 +232,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 |   |   +-- sdv_models.py            Gaussian Copula models
 |   +-- utils/
 |       +-- validators.py            Input validation
-+-- purple_agent/                    Purple Agent (autonomous investigator)
++-- purple_agent/                    Tracer Agent (autonomous investigator)
 |   +-- Dockerfile                   Python 3.11, TCMalloc, non-root
 |   +-- requirements.txt             Pinned dependencies
 |   +-- src/
@@ -249,20 +250,20 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 |   |           +-- layering.py      Chain DFS with decay analysis
 |   +-- tests/                       16 fixtures, integration tests
 |   +-- protos/                      Protobuf schema (FROZEN, shared)
-|   +-- README.md                    Purple Agent documentation
+|   +-- README.md                    Tracer Agent documentation
 |   +-- ARCHITECTURE.md              Full architecture document
 +-- scripts/
 |   +-- trigger_investigation.py     E2E investigation trigger
 |   +-- run_benchmark.py             Reproducibility benchmark
 +-- outputs/                         Generated data (gitignored)
-+-- tests/                           Green Agent test suite
++-- tests/                           Forge Agent test suite
 ```
 
 ---
 
 ## Evaluation Rubric
 
-Purple Agents are scored by the Green Agent on five dimensions:
+Tracer Agents are scored by the Forge Agent on five dimensions:
 
 | Dimension | Weight | Description |
 |-----------|--------|-------------|
@@ -316,10 +317,10 @@ python scripts/run_benchmark.py --seed 42 --difficulty 5 --runs 3 --output resul
 ## Testing
 
 ```bash
-# Green Agent tests
+# Forge Agent tests
 pytest tests/ -v
 
-# Purple Agent tests
+# Tracer Agent tests
 cd purple_agent
 PYTHONHASHSEED=0 pytest -p no:randomly -v --cov=src --cov-report=term-missing
 ```
@@ -330,18 +331,18 @@ PYTHONHASHSEED=0 pytest -p no:randomly -v --cov=src --cov-report=term-missing
 
 | Document | Location | Description |
 |----------|----------|-------------|
-| Purple Agent README | [`purple_agent/README.md`](purple_agent/README.md) | Quick start, configuration, API |
-| Purple Agent Architecture | [`purple_agent/ARCHITECTURE.md`](purple_agent/ARCHITECTURE.md) | Full system design, 28 rules, state machine |
-| Purple Agent Changelog | [`purple_agent/CHANGELOG.md`](purple_agent/CHANGELOG.md) | Release history |
-| Scenario Config | [`scenario.toml`](scenario.toml) | Green Agent scenario parameters |
+| Tracer Agent README | [`purple_agent/README.md`](purple_agent/README.md) | Quick start, configuration, API |
+| Tracer Agent Architecture | [`purple_agent/ARCHITECTURE.md`](purple_agent/ARCHITECTURE.md) | Full system design, 28 rules, state machine |
+| Tracer Agent Changelog | [`purple_agent/CHANGELOG.md`](purple_agent/CHANGELOG.md) | Release history |
+| Scenario Config | [`scenario.toml`](scenario.toml) | Forge Agent scenario parameters |
 
 ---
 
 ## Citation
 
 ```bibtex
-@software{panopticon_protocol,
-  title = {The Panopticon Protocol: A Synthetic Financial Crime Investigation Platform},
+@software{argus_aml,
+  title = {ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation},
   year = {2026},
   url = {https://github.com/Praneshrajan137/The-Agentic-Financial-Defense-Swarm-Forensic-AML-Graph-Reasoning-Engine}
 }

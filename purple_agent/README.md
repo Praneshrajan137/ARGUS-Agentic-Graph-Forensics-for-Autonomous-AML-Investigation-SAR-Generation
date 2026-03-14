@@ -1,4 +1,4 @@
-## Purple Agent -- The Panopticon Protocol
+## Tracer Agent -- ARGUS
 
 Autonomous forensic financial crime investigation system with dual-jurisdiction SAR generation, zero-hallucination guarantees, and deterministic output.
 
@@ -10,10 +10,10 @@ Autonomous forensic financial crime investigation system with dual-jurisdiction 
 
 ## Overview
 
-Purple Agent is a production-grade autonomous financial crime investigator. It operates as a node in an Agent-to-Agent (A2A) network, communicating via Protocol Buffers over HTTP. The system:
+Tracer Agent is a production-grade autonomous financial crime investigator. It operates as a node in an Agent-to-Agent (A2A) network, communicating via Protocol Buffers over HTTP. The system:
 
 - Receives investigation requests via A2A protocol (FastAPI :8080)
-- Fetches financial transaction graphs from the Green Agent via Protobuf
+- Fetches financial transaction graphs from the Forge Agent via Protobuf
 - Constructs NetworkX MultiDiGraph representations preserving all parallel edges and transaction metadata
 - Detects Structuring patterns (fan-in below Currency Transaction Report thresholds) using BFS traversal with currency-grouped threshold comparisons
 - Detects Layering patterns (decay chain analysis) using iterative DFS with bounded depth and path explosion circuit breakers
@@ -21,7 +21,7 @@ Purple Agent is a production-grade autonomous financial crime investigator. It o
 - Computes confidence scores with a transparent formula gated on configurable thresholds before SAR generation
 - Generates FinCEN SAR (US/USD) and FIU-IND STR (India/INR) narratives using the Five Ws framework with GPT-4.1 and mechanical fallback guarantees
 - Validates every entity, amount, and timestamp cited in SAR narratives against the source graph -- zero hallucination tolerance
-- Submits results to the Green Agent with SHA-256 idempotency keys for deduplication
+- Submits results to the Forge Agent with SHA-256 idempotency keys for deduplication
 - Produces deterministic output across consecutive runs (PYTHONHASHSEED=0, LLM seed=42)
 
 ---
@@ -37,7 +37,7 @@ Purple Agent is a production-grade autonomous financial crime investigator. It o
 ### Local Development
 
 ```bash
-cd purple_agent
+cd tracer_agent
 
 # Environment setup
 cp .env.example .env
@@ -59,19 +59,19 @@ PYTHONHASHSEED=0 python -m src.main
 ### Docker (Single Container)
 
 ```bash
-docker build -t purple-agent .
+docker build -t tracer .
 docker run -p 8080:8080 \
     --memory=1g --cpus=1.0 \
     --env-file .env \
-    purple-agent
+    tracer
 ```
 
 ### End-to-End Investigation (Docker Compose)
 
-Run a full AML investigation with both Green and Purple agents:
+Run a full AML investigation with both Green and Tracer Agents:
 
 ```bash
-# From the project root (not purple_agent/)
+# From the project root (not tracer_agent/)
 # Set your OpenAI API key in the environment
 export OPENAI_API_KEY=sk-your-key-here
 
@@ -88,7 +88,7 @@ python scripts/trigger_investigation.py
 docker-compose -f docker-compose.yml -f docker-compose.e2e.yml down
 ```
 
-The E2E override (`docker-compose.e2e.yml`) starts the Purple Agent as a FastAPI server on port 8080 instead of running the Ralph Wiggum task loop. The trigger script sends investigation requests for known criminal nodes and reports SAR narratives, entity recall, and confidence scores.
+The E2E override (`docker-compose.e2e.yml`) starts the Tracer Agent as a FastAPI server on port 8080 instead of running the Ralph Wiggum task loop. The trigger script sends investigation requests for known criminal nodes and reports SAR narratives, entity recall, and confidence scores.
 
 ### Health Check
 
@@ -97,7 +97,7 @@ curl -s http://localhost:8080/health | python -m json.tool
 # Expected:
 # {
 #     "status": "healthy",
-#     "service": "purple_agent",
+#     "service": "tracer_agent",
 #     "version": "7.1.0"
 # }
 ```
@@ -138,7 +138,7 @@ InvestigationRequest (protobuf / JSON)
 +----------------------------------------------------------+
         |
         v
-InvestigationResult (protobuf / JSON) -> Green Agent
+InvestigationResult (protobuf / JSON) -> Forge Agent
 ```
 
 Node responsibilities:
@@ -146,7 +146,7 @@ Node responsibilities:
 | Node | Implementation | Responsibility |
 |------|---------------|----------------|
 | `receive` | `receive_case()` | Initialize investigation, set status to IN_PROGRESS |
-| `analyze` | `analyze_graph()` | Fetch GraphFragment from Green Agent via A2A Client |
+| `analyze` | `analyze_graph()` | Fetch GraphFragment from Forge Agent via A2A Client |
 | `detect` | `detect_typology()` | Run structuring (BFS) and layering (DFS) on all nodes |
 | `synthesize` | `synthesize_evidence()` | Cross-reference text evidence with ledger via spaCy NER |
 | `compute_confidence` | `compute_confidence()` | Score computation; gate on CONFIDENCE_THRESHOLD |
@@ -165,7 +165,7 @@ Conditional edges:
 ## Project Structure
 
 ```
-purple_agent/
+tracer_agent/
 +-- agent.json                     A2A agent card (capabilities, endpoints)
 +-- scenario.toml                  Scenario configuration
 +-- Dockerfile                     Multi-stage: Python 3.11, TCMalloc, non-root
@@ -245,7 +245,7 @@ All configuration is centralized in `src/config.py` (SSOT). Runtime overrides vi
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GREEN_AGENT_URL` | `http://localhost:9090` | Upstream agent URL |
+| `forge_agent_URL` | `http://localhost:9090` | Upstream agent URL |
 | `A2A_SERVER_HOST` | `0.0.0.0` | Bind host |
 | `A2A_SERVER_PORT` | `8080` | Bind port |
 
@@ -372,7 +372,7 @@ JSON response fields: `case_id`, `sar_narrative`, `typology_detected`, `involved
 
 ### GET /health
 
-- **Response:** `{"status": "healthy", "service": "purple_agent", "version": "7.1.0"}`
+- **Response:** `{"status": "healthy", "service": "tracer_agent", "version": "7.1.0"}`
 
 ### GET /agent.json
 
@@ -386,7 +386,7 @@ JSON response fields: `case_id`, `sar_narrative`, `typology_detected`, `involved
 
 ## Determinism Guarantees
 
-Purple Agent produces deterministic output across consecutive runs. Mechanisms: PYTHONHASHSEED=0, sorted() on all set/dict iteration, LLM seed=42 with temperature=0.0, deterministic idempotency keys.
+Tracer Agent produces deterministic output across consecutive runs. Mechanisms: PYTHONHASHSEED=0, sorted() on all set/dict iteration, LLM seed=42 with temperature=0.0, deterministic idempotency keys.
 
 ---
 

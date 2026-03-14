@@ -1,12 +1,12 @@
 """
-Configuration Constants -- Green Agent v8.0
+Configuration Constants -- Forge Agent v8.0
 SINGLE SOURCE OF TRUTH for all thresholds, ports, and operational constants.
 
 CRITICAL: ALL monetary thresholds are Decimal. NEVER float.
 All values are overridable via os.getenv() with Decimal-safe defaults.
-This mirrors Purple Agent's config.py pattern for full protocol parity.
+This mirrors Tracer Agent's config.py pattern for full protocol parity.
 
-v8.0: Full parity with Purple Agent config. Decimal-everywhere for currency.
+v8.0: Full parity with Tracer Agent config. Decimal-everywhere for currency.
       Added assessment rubric, evidence, timezone, regex, safety limits.
 v7.0: Initial config with basic constants.
 """
@@ -21,7 +21,7 @@ from decimal import Decimal
 AGENT_VERSION = "8.0.0"
 
 # ═══════════════════════════════════════════════════════════════════
-# A2A SERVER (Green Agent is the server, Purple is the client)
+# A2A SERVER (Forge Agent is the server, Tracer is the client)
 # ═══════════════════════════════════════════════════════════════════
 A2A_SERVER_HOST = os.getenv("A2A_SERVER_HOST", "0.0.0.0")
 A2A_SERVER_PORT = int(os.getenv("A2A_SERVER_PORT", "9090"))
@@ -111,7 +111,7 @@ MAX_PATHS_PER_SEARCH = int(os.getenv("MAX_PATHS_PER_SEARCH", "1000"))
 CONFIDENCE_THRESHOLD = Decimal(os.getenv("CONFIDENCE_THRESHOLD", "0.5"))
 
 # Assessment rubric weights (must sum to 1.0)
-# Pattern identification: Did Purple Agent detect the correct typology?
+# Pattern identification: Did Tracer Agent detect the correct typology?
 RUBRIC_WEIGHT_PATTERN = Decimal("0.28")
 # Evidence quality: Entity-level Precision/Recall/F1 against ground truth
 RUBRIC_WEIGHT_EVIDENCE = Decimal("0.20")

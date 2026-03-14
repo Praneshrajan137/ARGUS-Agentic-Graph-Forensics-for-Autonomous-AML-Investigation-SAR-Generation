@@ -4,7 +4,7 @@ Evidence Generator
 Generates unstructured text artifacts (emails, SARs, documents) that contain
 clues required to solve financial crimes.
 
-This forces the Purple Agent to combine:
+This forces the Tracer Agent to combine:
 1. Natural language understanding (reading emails)
 2. Information extraction (finding entity IDs in text)
 3. Graph querying (following the extracted IDs)
@@ -175,7 +175,7 @@ RECOMMENDATION: Immediate investigation and possible law enforcement referral.""
         """
         Generate an internal bank email discussing suspicious activity.
         
-        This is CRITICAL: The email contains the entity ID that the Purple Agent
+        This is CRITICAL: The email contains the entity ID that the Tracer Agent
         must extract before querying the graph.
         
         Args:
@@ -262,7 +262,7 @@ Investigation required within 24 hours per BSA requirements."""
         - Graph says "$9,500" (correct)
         - Receipt says "$9,500" (correct)
 
-        The Purple Agent must determine which source is reliable.
+        The Tracer Agent must determine which source is reliable.
 
         Args:
             subject_id: Entity ID

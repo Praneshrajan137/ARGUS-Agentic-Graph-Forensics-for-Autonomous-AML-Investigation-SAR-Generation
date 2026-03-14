@@ -1,12 +1,12 @@
 # RALPH WIGGUM AGENT INSTRUCTIONS
 
-You are an autonomous coding agent executing the Green Financial Crime Agent project using Test-Driven Development (TDD).
+You are an autonomous coding agent executing the ARGUS Forge Agent project using Test-Driven Development (TDD).
 
 ## Project Overview
 
-**Project**: Green Financial Crime Agent (The Panopticon Protocol)  
+**Project**: ARGUS Forge Agent  
 **Mission**: Zero-Failure Synthetic Financial Crime Simulator  
-**Goal**: Generate mathematically consistent economies with surgically injected money laundering typologies for Purple Agent training.
+**Goal**: Generate mathematically consistent economies with surgically injected money laundering typologies for Tracer Agent training.
 
 ---
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Infrastructure Validation Test Suite
-# The Panopticon Protocol Section 4.2.2 - Verification
+# ARGUS Section 4.2.2 - Verification
 #
 # Tests:
 # 1. TCMalloc verification
@@ -13,7 +13,7 @@ set -e
 
 echo "=========================================="
 echo "Infrastructure Validation Test Suite"
-echo "The Panopticon Protocol"
+echo "ARGUS"
 echo "=========================================="
 
 # Colors for output
@@ -31,7 +31,7 @@ warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 # ============================================================================
 echo ""
 echo "Test 1: Verifying TCMalloc is loaded..."
-if docker-compose exec -T green_agent_app bash -c '
+if docker-compose exec -T forge_agent_app bash -c '
     if [ -n "$LD_PRELOAD" ]; then
         echo "LD_PRELOAD is set: $LD_PRELOAD"
         exit 0

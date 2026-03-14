@@ -1,7 +1,7 @@
 {
   "project": {
-    "name": "Green Financial Crime Agent",
-    "codename": "The Panopticon Protocol",
+    "name": "ARGUS Forge Agent",
+    "codename": "ARGUS",
     "version": "1.0.0",
     "description": "Zero-Failure Synthetic Financial Crime Simulator"
   },

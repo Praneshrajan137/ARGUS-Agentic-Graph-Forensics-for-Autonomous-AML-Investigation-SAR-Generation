@@ -1,8 +1,8 @@
-# Envoy Sidecar Configuration for Green Agent
-# The Panopticon Protocol Section 4.2.2 - Production Networking Layer
+# Envoy Sidecar Configuration for Forge Agent
+# ARGUS Section 4.2.2 - Production Networking Layer
 #
 # Architecture:
-#   External traffic -> 0.0.0.0:8000 (Envoy) -> green_agent_app:5000 (FastAPI)
+#   External traffic -> 0.0.0.0:8000 (Envoy) -> forge_agent_app:5000 (FastAPI)
 #
 # Features:
 #   - Circuit breaking (1024 max connections)
@@ -34,7 +34,7 @@ static_resources:
               - match:
                   prefix: "/"
                 route:
-                  cluster: green_agent_backend
+                  cluster: forge_agent_backend
                   timeout: 60s
                   # Retry policy with exponential backoff + jitter
                   retry_policy:
@@ -84,7 +84,7 @@ static_resources:
                 text_format: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_SENT% %DURATION%ms\n"
 
   clusters:
-  - name: green_agent_backend
+  - name: forge_agent_backend
     connect_timeout: 10s
     type: STRICT_DNS
     lb_policy: ROUND_ROBIN
@@ -108,14 +108,14 @@ static_resources:
         path: "/health"
     
     load_assignment:
-      cluster_name: green_agent_backend
+      cluster_name: forge_agent_backend
       endpoints:
       - lb_endpoints:
         - endpoint:
             address:
               socket_address:
-                # Connect to green_agent_app container on Docker network
-                address: green_agent_app
+                # Connect to forge_agent_app container on Docker network
+                address: forge_agent_app
                 port_value: 5000
 
 admin:
