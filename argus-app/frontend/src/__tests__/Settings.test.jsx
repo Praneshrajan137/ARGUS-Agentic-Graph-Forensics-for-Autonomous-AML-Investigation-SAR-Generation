@@ -3,22 +3,24 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Settings from '@/pages/Settings';
 
-const mockHealth = {
-  status: 'healthy',
-  forge_version: '1.0.0',
-  tracer_version: '1.0.0',
-  unified_version: '1.0.0',
-  node_count: 1000,
-  edge_count: 5000,
-  uptime_seconds: 3600,
-  graph_loaded: true,
-};
-
-const mockConfig = {
-  seed: 42,
-  difficulty: 5,
-  node_count: 1000,
-};
+// Use vi.hoisted to define mock data that vi.mock factories can reference
+const { mockHealth, mockConfig } = vi.hoisted(() => ({
+  mockHealth: {
+    status: 'healthy',
+    forge_version: '1.0.0',
+    tracer_version: '1.0.0',
+    unified_version: '1.0.0',
+    node_count: 1000,
+    edge_count: 5000,
+    uptime_seconds: 3600,
+    graph_loaded: true,
+  },
+  mockConfig: {
+    seed: 42,
+    difficulty: 5,
+    node_count: 1000,
+  },
+}));
 
 vi.mock('@/api/client', () => ({
   getConfig: vi.fn().mockResolvedValue(mockConfig),
@@ -26,6 +28,15 @@ vi.mock('@/api/client', () => ({
   generateWorld: vi.fn().mockResolvedValue({ status: 'ok' }),
   resetState: vi.fn().mockResolvedValue({ status: 'ok' }),
 }));
+
+// Mock AnimatePresence to skip exit animations (jsdom has no animation loop)
+vi.mock('framer-motion', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -73,9 +84,7 @@ describe('Settings Page', () => {
   it('changes seed when random button is clicked', () => {
     renderPage();
     const seedInput = screen.getByTestId('seed-input');
-    const initialValue = seedInput.value;
     fireEvent.click(screen.getByTestId('random-seed-btn'));
-    // Value may change (random). We check the input still has a number.
     expect(Number(seedInput.value)).not.toBeNaN();
   });
 

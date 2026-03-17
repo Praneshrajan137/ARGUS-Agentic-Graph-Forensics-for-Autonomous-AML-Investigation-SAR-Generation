@@ -5,9 +5,14 @@
 
 const BASE = '/api';
 
-class ApiError extends Error {
+/** Default timeout: 10s for reads, overridden per-call for long operations */
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+export class ApiError extends Error {
   constructor(status, statusText, body) {
-    super(`API Error ${status}: ${statusText}`);
+    const detail = body?.detail || statusText;
+    super(`API Error ${status}: ${detail}`);
+    this.name = 'ApiError';
     this.status = status;
     this.statusText = statusText;
     this.body = body;
@@ -15,13 +20,30 @@ class ApiError extends Error {
 }
 
 async function request(path, options = {}) {
+  const { timeout = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options;
   const url = `${BASE}${path}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   const config = {
     headers: { 'Content-Type': 'application/json' },
-    ...options,
+    signal: controller.signal,
+    ...fetchOptions,
   };
 
-  const response = await fetch(url, config);
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new ApiError(0, 'Request timed out', { detail: `Request to ${path} timed out after ${timeout}ms` });
+    }
+    // Network error (backend down, CORS, etc.)
+    throw new ApiError(0, 'Network error', { detail: 'Cannot reach the ARGUS backend. Is the server running?' });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let body;
@@ -37,7 +59,7 @@ export const getHealth = () => request('/health');
 
 // ═══ GENERATION ═══
 export const generateWorld = (params) =>
-  request('/generate', { method: 'POST', body: JSON.stringify(params) });
+  request('/generate', { method: 'POST', body: JSON.stringify(params), timeout: 60_000 });
 
 // ═══ GRAPH ═══
 export const getGraphStats = () => request('/graph/stats');
@@ -62,7 +84,7 @@ export const getNodeConnections = (nodeId) =>
 
 // ═══ INVESTIGATION ═══
 export const runInvestigation = (params) =>
-  request('/investigation/investigate', { method: 'POST', body: JSON.stringify(params) });
+  request('/investigation/investigate', { method: 'POST', body: JSON.stringify(params), timeout: 30_000 });
 
 export const getInvestigations = () => request('/investigation/list');
 

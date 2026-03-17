@@ -1,20 +1,27 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import * as d3 from 'd3';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
-// ═══ STYLE CONSTANTS (CSS custom property values for Canvas) ═══
-const COLORS = {
-  surface3: '#e2e8f0',
-  amberBase: '#d97706',
-  amberTint: '#fef3c7',
-  roseBase: '#e11d48',
-  violetBase: '#7c3aed',
-  violetTint: '#ede9fe',
-  accentBase: '#4f46e5',
-  text0: '#0f172a',
-  text2: '#64748b',
-  text3: '#94a3b8',
-};
+// ═══ THEME COLOR READER — reads CSS custom properties for Canvas rendering ═══
+function getThemeColors() {
+  const s = getComputedStyle(document.documentElement);
+  const get = (name) => s.getPropertyValue(name).trim() || undefined;
+  return {
+    surface3:   get('--surface-3')   || '#e2e8f0',
+    amberBase:  get('--amber-base')  || '#d97706',
+    amberTint:  get('--amber-tint')  || '#fef3c7',
+    roseBase:   get('--rose-base')   || '#e11d48',
+    violetBase: get('--violet-base') || '#7c3aed',
+    violetTint: get('--violet-tint') || '#ede9fe',
+    accentBase: get('--accent-base') || '#4f46e5',
+    text0:      get('--text-0')      || '#0f172a',
+    text2:      get('--text-2')      || '#64748b',
+    text3:      get('--text-3')      || '#94a3b8',
+  };
+}
+
+// Cache theme colors — refreshed each simulation setup
+let COLORS = getThemeColors();
 
 function nodeRadius(node) {
   switch (node.group) {
@@ -76,7 +83,7 @@ function edgeOpacity(edge) {
   }
 }
 
-export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeId }) {
+const NetworkGraph = forwardRef(function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeId }, ref) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const simRef = useRef(null);
@@ -90,6 +97,7 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
   // Deep copy nodes/edges so D3 can mutate them
   const nodesRef = useRef([]);
   const edgesRef = useRef([]);
+  const quadtreeRef = useRef(null);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -101,7 +109,7 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
     const h = rect.height;
 
     ctx.save();
-    ctx.clearRect(0, 0, w * dpr, h * dpr);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Apply transform
     const t = transformRef.current;
@@ -197,6 +205,9 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
   useEffect(() => {
     if (!nodes.length || !canvasRef.current) return;
 
+    // Refresh theme colors from CSS custom properties
+    COLORS = getThemeColors();
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -209,8 +220,12 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
     nodesRef.current = nodesCopy;
     edgesRef.current = edgesCopy;
 
-    // Create node lookup for hit testing
-    const nodeById = new Map(nodesCopy.map(n => [String(n.id), n]));
+    // Build quadtree for O(log n) spatial hit testing
+    const qt = d3.quadtree()
+      .x(d => d.x)
+      .y(d => d.y)
+      .addAll(nodesCopy);
+    quadtreeRef.current = qt;
 
     // Force simulation
     const sim = d3.forceSimulation(nodesCopy)
@@ -223,6 +238,9 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
     simRef.current = sim;
 
     sim.on('tick', () => {
+      // Rebuild quadtree as nodes move
+      qt.removeAll(nodesCopy).addAll(nodesCopy);
+      quadtreeRef.current = qt;
       renderFrame();
     });
 
@@ -248,26 +266,19 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
     zoomBehaviorRef.current = zoom;
     d3.select(canvas).call(zoom);
 
-    // ── Hit testing helpers ──
+    // ── Hit testing via quadtree O(log n) ──
     function getNodeAtPoint(mx, my) {
       const t = transformRef.current;
       const x = (mx - t.x) / t.k;
       const y = (my - t.y) / t.k;
-      // Find nearest node within threshold
-      let closest = null;
-      let closestDist = Infinity;
-      for (const node of nodesCopy) {
-        if (node.x == null || node.y == null) continue;
-        const dx = node.x - x;
-        const dy = node.y - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const threshold = Math.max(nodeRadius(node) + 4, 8);
-        if (dist < threshold && dist < closestDist) {
-          closest = node;
-          closestDist = dist;
-        }
-      }
-      return closest;
+      const searchRadius = 20; // max pixel radius to search
+      const candidate = qt.find(x, y, searchRadius);
+      if (!candidate || candidate.x == null) return null;
+      const dx = candidate.x - x;
+      const dy = candidate.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const threshold = Math.max(nodeRadius(candidate) + 4, 8);
+      return dist <= threshold ? candidate : null;
     }
 
     // ── Mouse move → hover ──
@@ -308,26 +319,19 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
       }
     };
 
-    // ── Drag ──
+    // ── Drag (using quadtree for subject lookup) ──
     const drag = d3.drag()
       .container(canvas)
       .subject((event) => {
         const t = transformRef.current;
         const x = (event.x - t.x) / t.k;
         const y = (event.y - t.y) / t.k;
-        let closest = null;
-        let closestDist = Infinity;
-        for (const node of nodesCopy) {
-          if (node.x == null) continue;
-          const dx = node.x - x;
-          const dy = node.y - y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < nodeRadius(node) + 8 && dist < closestDist) {
-            closest = node;
-            closestDist = dist;
-          }
-        }
-        return closest;
+        const candidate = qt.find(x, y, 20);
+        if (!candidate || candidate.x == null) return null;
+        const dx = candidate.x - x;
+        const dy = candidate.y - y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return dist < nodeRadius(candidate) + 8 ? candidate : null;
       })
       .on('start', (event) => {
         if (!event.active) sim.alphaTarget(0.3).restart();
@@ -370,6 +374,13 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
     };
   }, [nodes, edges, onNodeSelect, renderFrame]);
 
+  // Expose zoom controls via ref for keyboard shortcuts
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => handleZoomIn(),
+    zoomOut: () => handleZoomOut(),
+    fitView: () => handleFitView(),
+  }));
+
   // ── Zoom controls ──
   const handleZoomIn = () => {
     const canvas = canvasRef.current;
@@ -396,6 +407,9 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
         ref={canvasRef}
         className="w-full h-full"
         style={{ display: 'block' }}
+        role="img"
+        aria-label="Interactive financial network graph. Click nodes to select, double-click to investigate. Scroll to zoom, drag to pan."
+        tabIndex={0}
       />
 
       {/* Tooltip */}
@@ -456,4 +470,6 @@ export default function NetworkGraph({ nodes, edges, onNodeSelect, selectedNodeI
       </div>
     </div>
   );
-}
+});
+
+export default NetworkGraph;

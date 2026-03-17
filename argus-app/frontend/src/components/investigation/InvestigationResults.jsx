@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -10,6 +10,8 @@ import {
   BarChart3,
   FileText,
   FolderOpen,
+  Copy,
+  Check as CheckIcon,
 } from 'lucide-react';
 import TypologyBadge from '@/components/shared/TypologyBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -185,6 +187,11 @@ export default function InvestigationResults({ result }) {
             CONFIDENTIAL
           </span>
         </div>
+        {result.sar_narrative && (
+          <div className="absolute top-3 right-3 z-20">
+            <CopyButton text={result.sar_narrative} />
+          </div>
+        )}
         <div
           className="p-6 rounded-card border font-mono text-sm leading-relaxed whitespace-pre-wrap"
           style={{
@@ -361,7 +368,7 @@ export default function InvestigationResults({ result }) {
       <AccordionSection
         title="Hallucination Validation"
         count={result.validation_errors?.length || 0}
-        defaultOpen={(result.validation_errors?.length || 0) > 0}
+        defaultOpen
         icon={ShieldCheck}
         accentColor={
           (result.validation_errors?.length || 0) > 0
@@ -426,6 +433,35 @@ export default function InvestigationResults({ result }) {
         </Link>
       </div>
     </motion.div>
+  );
+}
+
+/** Clipboard copy button with success feedback. */
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard API may fail in non-HTTPS */ }
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-btn
+                 bg-surface-0/90 backdrop-blur-sm border border-surface-3
+                 hover:bg-surface-1 transition-colors"
+      title="Copy narrative to clipboard"
+      data-testid="copy-narrative-btn"
+    >
+      {copied ? (
+        <><CheckIcon className="w-3.5 h-3.5 text-emerald-500" /><span className="text-emerald-600">Copied</span></>
+      ) : (
+        <><Copy className="w-3.5 h-3.5 text-text-2" /><span className="text-text-2">Copy</span></>
+      )}
+    </button>
   );
 }
 

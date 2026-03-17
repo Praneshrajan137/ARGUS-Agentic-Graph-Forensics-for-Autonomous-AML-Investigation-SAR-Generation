@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { BarChart3, Check, X, Target } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import GlowCard from '@/components/shared/GlowCard';
@@ -52,7 +53,7 @@ export default function Assessment() {
       const result = await runAssessment(selectedCaseId);
       setAssessment(result);
     } catch (err) {
-      setAssessError(err);
+      setAssessError(err instanceof Error ? err : new Error(err?.message || String(err)));
     } finally {
       setAssessing(false);
     }
@@ -243,7 +244,20 @@ export default function Assessment() {
         )}
 
         {/* ═══ EMPTY STATE ═══ */}
-        {!assessment && !assessing && (
+        {!assessment && !assessing && completedInvestigations.length === 0 && (
+          <EmptyState
+            icon={BarChart3}
+            title="No Completed Investigations"
+            description="Run an investigation first to generate results that can be scored."
+            action={
+              <Link to="/investigate"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-btn hover:bg-accent-hover transition-colors">
+                Go to Investigation Console
+              </Link>
+            }
+          />
+        )}
+        {!assessment && !assessing && completedInvestigations.length > 0 && (
           <EmptyState
             icon={BarChart3}
             title="Select an Investigation"

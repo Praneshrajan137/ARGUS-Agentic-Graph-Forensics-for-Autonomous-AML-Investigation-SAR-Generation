@@ -1,6 +1,11 @@
+const path = require('path');
+
 /** @type {import('tailwindcss').Config} */
-export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+module.exports = {
+  content: [
+    path.join(__dirname, 'index.html'),
+    path.join(__dirname, 'src/**/*.{js,jsx}'),
+  ],
   theme: {
     extend: {
       fontFamily: {
@@ -74,3 +79,4 @@ export default {
   },
   plugins: [require('@tailwindcss/forms')],
 };
+

@@ -95,39 +95,59 @@ function PipelineStepNode({ step, index, state, detail, prevComplete }) {
   return (
     <motion.div
       variants={stepEntrance}
-      className="flex flex-col items-center relative flex-1 min-w-0"
+      className="flex flex-row md:flex-col items-center relative flex-1 min-w-0 gap-3 md:gap-0"
       data-testid={`pipeline-step-${step.key}`}
       data-state={state}
+      role="listitem"
+      aria-label={`${step.label}: ${state}`}
+      aria-current={state === 'active' ? 'step' : undefined}
     >
-      {/* Connector line (not on first step) */}
+      {/* Connector line — horizontal on desktop, vertical on mobile */}
       {index > 0 && (
-        <div className="absolute -left-1/2 top-5 w-full h-0.5 hidden md:block">
-          <motion.div
-            className="h-full rounded-full"
-            style={{
-              background: prevComplete
-                ? 'var(--emerald-base)'
-                : 'var(--surface-3)',
-            }}
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.3, delay: index * 0.2 }}
-          />
-        </div>
+        <>
+          {/* Desktop: horizontal connector */}
+          <div className="absolute -left-1/2 top-4 w-full h-0.5 hidden md:block">
+            <motion.div
+              className="h-full rounded-full"
+              style={{
+                background: prevComplete
+                  ? 'var(--emerald-base)'
+                  : 'var(--surface-3)',
+              }}
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.3, delay: index * 0.2 }}
+            />
+          </div>
+          {/* Mobile: vertical connector */}
+          <div className="absolute left-4 -top-3 w-0.5 h-3 md:hidden">
+            <motion.div
+              className="w-full h-full rounded-full"
+              style={{
+                background: prevComplete
+                  ? 'var(--emerald-base)'
+                  : 'var(--surface-3)',
+              }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.2, delay: index * 0.15 }}
+            />
+          </div>
+        </>
       )}
 
-      {/* Icon circle */}
-      <div className="relative">
+      {/* Icon circle — smaller on mobile */}
+      <div className="relative flex-shrink-0">
         <motion.div
-          className={`w-10 h-10 rounded-full flex items-center justify-center relative z-10 ${styles.bg}`}
+          className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center relative z-10 ${styles.bg}`}
           animate={state === 'active' ? activePulse : {}}
         >
           {state === 'complete' ? (
-            <Check className="w-4 h-4 text-white" />
+            <Check className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
           ) : state === 'failed' ? (
-            <X className="w-4 h-4 text-white" />
+            <X className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
           ) : (
-            <Icon className={`w-4 h-4 ${styles.iconColor}`} />
+            <Icon className={`w-3.5 h-3.5 md:w-4 md:h-4 ${styles.iconColor}`} />
           )}
         </motion.div>
 
@@ -142,23 +162,25 @@ function PipelineStepNode({ step, index, state, detail, prevComplete }) {
         )}
       </div>
 
-      {/* Label */}
-      <span
-        className={`mt-2 text-xs font-semibold ${styles.labelColor} text-center`}
-      >
-        {step.label}
-      </span>
-
-      {/* Detail (visible after completion) */}
-      {detail && detail.duration_ms != null && (
-        <motion.span
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-0.5 text-[10px] font-mono text-text-3 text-center truncate max-w-[80px]"
+      {/* Label + detail — beside icon on mobile, below on desktop */}
+      <div className="flex flex-col md:items-center">
+        <span
+          className={`md:mt-2 text-xs font-semibold ${styles.labelColor} md:text-center`}
         >
-          {detail.duration_ms}ms
-        </motion.span>
-      )}
+          {step.label}
+        </span>
+
+        {/* Detail (visible after completion) */}
+        {detail && detail.duration_ms != null && (
+          <motion.span
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-0.5 text-[10px] font-mono text-text-3 md:text-center truncate max-w-[80px]"
+          >
+            {detail.duration_ms}ms
+          </motion.span>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -175,8 +197,10 @@ export default function PipelineTracker({ stepStates = {}, stepDetails = {} }) {
       variants={pipelineStagger}
       initial="hidden"
       animate="show"
-      className="flex flex-col md:flex-row items-start md:items-start justify-between gap-4 md:gap-2 px-4"
+      className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 md:gap-2 px-4"
       data-testid="pipeline-tracker"
+      role="list"
+      aria-label="Investigation pipeline steps"
     >
       {PIPELINE_STEPS.map((step, i) => (
         <PipelineStepNode

@@ -1,5 +1,6 @@
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Globe, Calendar, User, MapPin, AlertTriangle, Scale } from 'lucide-react';
+import { FileText, Globe, Calendar, User, MapPin, AlertTriangle, Scale, Copy, Check } from 'lucide-react';
 import TypologyBadge from '@/components/shared/TypologyBadge';
 
 const sarEntrance = {
@@ -136,10 +137,13 @@ export default function SARDocument({ investigation }) {
 
           {/* NARRATIVE */}
           <div className="pt-4 border-t" style={{ borderColor: 'var(--sar-border)' }}>
-            <h3 className="text-sm font-semibold uppercase tracking-wider mb-3"
-                style={{ color: 'var(--sar-heading)' }}>
-              Full Narrative
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider"
+                  style={{ color: 'var(--sar-heading)' }}>
+                Full Narrative
+              </h3>
+              {sar_narrative && <SARCopyButton text={sar_narrative} />}
+            </div>
             <div
               className="font-mono text-sm leading-[1.8] whitespace-pre-wrap"
               style={{ color: 'var(--sar-text)' }}
@@ -188,6 +192,33 @@ export default function SARDocument({ investigation }) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function SARCopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard may fail in non-HTTPS */ }
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="relative z-20 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-btn
+                 bg-surface-0/90 backdrop-blur-sm border border-surface-3
+                 hover:bg-surface-1 transition-colors"
+      title="Copy narrative to clipboard"
+    >
+      {copied ? (
+        <><Check className="w-3.5 h-3.5 text-emerald-500" /><span className="text-emerald-600">Copied</span></>
+      ) : (
+        <><Copy className="w-3.5 h-3.5 text-text-2" /><span className="text-text-2">Copy</span></>
+      )}
+    </button>
   );
 }
 

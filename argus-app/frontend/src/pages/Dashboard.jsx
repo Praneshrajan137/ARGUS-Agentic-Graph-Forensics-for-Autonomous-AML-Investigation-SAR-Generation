@@ -78,7 +78,7 @@ export default function Dashboard() {
         <motion.div variants={fadeUp} className="grid grid-cols-4 gap-4">
           <StatCard label="Total Nodes" value={stats?.node_count || 0} icon={Network} color="accent" />
           <StatCard label="Total Edges" value={stats?.edge_count || 0} icon={Network} color="cyan" />
-          <StatCard label="Graph Density" value={(stats?.density || 0) * 100} icon={Shield} color="emerald" decimals={4} suffix="%" />
+          <StatCard label="Graph Density" value={(stats?.density || 0) * 100} icon={Shield} color="emerald" decimals={2} suffix="%" />
           <StatCard label="Avg Degree" value={stats?.avg_degree || 0} icon={AlertTriangle} color="amber" decimals={2} />
         </motion.div>
 

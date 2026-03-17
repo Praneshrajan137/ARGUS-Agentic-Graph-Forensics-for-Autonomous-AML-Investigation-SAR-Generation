@@ -23,35 +23,47 @@ const RUBRIC_COLORS = {
  * @param {{ rubric: Record<string, { weight: number, score: number }> | null }} props
  */
 export default function RubricChart({ rubric }) {
+  // rubric can be either { pattern_detection: 0.8, ... } (flat floats)
+  // or { pattern: { score: 80 }, ... } (nested objects) — handle both
+  const getScore = (key, altKey) => {
+    if (!rubric) return 0;
+    // Flat float (0.0–1.0) from backend
+    if (typeof rubric[key] === 'number') return Math.round(rubric[key] * 100);
+    // Nested object form
+    if (typeof rubric[altKey]?.score === 'number') return Math.round(rubric[altKey].score);
+    if (typeof rubric[altKey] === 'number') return Math.round(rubric[altKey] * 100);
+    return 0;
+  };
+
   const data = [
     {
       name: 'Pattern',
       weight: 28,
-      score: rubric?.pattern?.score || 0,
+      score: getScore('pattern_detection', 'pattern'),
       fullMark: 100,
     },
     {
       name: 'Evidence',
       weight: 20,
-      score: rubric?.evidence?.score || 0,
+      score: getScore('evidence_analysis', 'evidence'),
       fullMark: 100,
     },
     {
       name: 'Narrative',
       weight: 16,
-      score: rubric?.narrative?.score || 0,
+      score: getScore('narrative_quality', 'narrative'),
       fullMark: 100,
     },
     {
       name: 'Completeness',
       weight: 16,
-      score: rubric?.completeness?.score || 0,
+      score: getScore('completeness', 'completeness'),
       fullMark: 100,
     },
     {
       name: 'Efficiency',
       weight: 20,
-      score: rubric?.efficiency?.score || 0,
+      score: getScore('efficiency', 'efficiency'),
       fullMark: 100,
     },
   ];
@@ -75,7 +87,7 @@ export default function RubricChart({ rubric }) {
             tick={{
               fontSize: 11,
               fill: 'var(--text-3)',
-              fontFamily: 'JetBrains Mono',
+              fontFamily: 'var(--font-mono)',
             }}
           />
           <YAxis
@@ -85,7 +97,7 @@ export default function RubricChart({ rubric }) {
             tick={{
               fontSize: 13,
               fill: 'var(--text-1)',
-              fontFamily: 'DM Sans',
+              fontFamily: 'var(--font-body)',
               fontWeight: 500,
             }}
           />
@@ -116,7 +128,7 @@ export default function RubricChart({ rubric }) {
               formatter={(v) => `${v}%`}
               style={{
                 fontSize: 12,
-                fontFamily: 'JetBrains Mono',
+                fontFamily: 'var(--font-mono)',
                 fontWeight: 700,
                 fill: 'var(--text-1)',
               }}

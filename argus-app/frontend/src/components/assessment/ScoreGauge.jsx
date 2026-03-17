@@ -38,51 +38,53 @@ export default function ScoreGauge({ score, label = 'OVERALL' }) {
 
   return (
     <div className="flex flex-col items-center" data-testid="score-gauge">
-      <svg
-        width="200"
-        height="200"
-        viewBox="0 0 200 200"
-        className="-rotate-90"
-      >
-        {/* Background ring */}
-        <circle
-          cx="100"
-          cy="100"
-          r="80"
-          fill="none"
-          stroke="var(--surface-3)"
-          strokeWidth="12"
-          strokeOpacity="0.3"
-        />
-        {/* Score ring */}
-        <motion.circle
-          cx="100"
-          cy="100"
-          r="80"
-          fill="none"
-          stroke={color}
-          strokeWidth="12"
-          strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
-          initial={{ strokeDashoffset: CIRCUMFERENCE }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-        />
-      </svg>
-      {/* Center text (positioned absolutely over SVG) */}
-      <div
-        className="absolute flex flex-col items-center"
-        style={{ marginTop: '60px' }}
-      >
-        <motion.span
-          className="font-display text-5xl font-normal tabular-nums leading-none"
-          style={{ color }}
+      <div className="relative inline-flex items-center justify-center w-[200px] h-[200px]">
+        <svg
+          width="200"
+          height="200"
+          viewBox="0 0 200 200"
+          className="-rotate-90"
+          role="img"
+          aria-label={`Assessment score: ${pct}%`}
         >
-          {display}
-        </motion.span>
-        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-text-2 mt-1">
-          {label}
-        </span>
+          <title>Assessment score gauge showing {pct}%</title>
+          {/* Background ring */}
+          <circle
+            cx="100"
+            cy="100"
+            r="80"
+            fill="none"
+            stroke="var(--surface-3)"
+            strokeWidth="12"
+            strokeOpacity="0.3"
+          />
+          {/* Score ring */}
+          <motion.circle
+            cx="100"
+            cy="100"
+            r="80"
+            fill="none"
+            stroke={color}
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={CIRCUMFERENCE}
+            initial={{ strokeDashoffset: CIRCUMFERENCE }}
+            animate={{ strokeDashoffset: offset }}
+            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+          />
+        </svg>
+        {/* Center text (positioned absolutely over SVG) */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <motion.span
+            className="font-display text-5xl font-normal tabular-nums leading-none"
+            style={{ color }}
+          >
+            {display}
+          </motion.span>
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-text-2 mt-1">
+            {label}
+          </span>
+        </div>
       </div>
     </div>
   );

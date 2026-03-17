@@ -64,6 +64,11 @@
   --duration-normal: 250ms;
   --duration-slow: 400ms;
 
+  /* Typography — font families */
+  --font-display: 'Instrument Serif', serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
   /* SAR Document Tokens (paper metaphor) */
   --sar-bg: #fafaf8;
   --sar-border: #e8e5de;

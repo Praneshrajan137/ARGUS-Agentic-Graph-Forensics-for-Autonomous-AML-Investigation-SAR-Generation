@@ -11,72 +11,68 @@ class ResizeObserver {
 }
 globalThis.ResizeObserver = ResizeObserver;
 
-const mockInvestigations = [
-  {
-    case_id: 'ARGUS-001',
-    status: 'COMPLETE',
-    detected_typology: 'Layering',
-    confidence_score: 0.87,
+// Use vi.hoisted to define mock data that vi.mock factories can reference
+const { mockInvestigations, mockAssessment } = vi.hoisted(() => ({
+  mockInvestigations: [
+    {
+      case_id: 'ARGUS-001',
+      status: 'COMPLETE',
+      detected_typology: 'Layering',
+      confidence_score: 0.87,
+    },
+    {
+      case_id: 'ARGUS-002',
+      status: 'RUNNING',
+      detected_typology: 'Structuring',
+      confidence_score: 0.45,
+    },
+    {
+      case_id: 'ARGUS-003',
+      status: 'COMPLETE',
+      detected_typology: 'Structuring',
+      confidence_score: 0.92,
+    },
+  ],
+  mockAssessment: {
+    overall_score: 0.82,
+    rubric_breakdown: {
+      pattern: { weight: 0.28, score: 85 },
+      evidence: { weight: 0.20, score: 72 },
+      narrative: { weight: 0.16, score: 60 },
+      completeness: { weight: 0.16, score: 90 },
+      efficiency: { weight: 0.20, score: 78 },
+    },
+    entity_metrics: {
+      precision: 0.88,
+      recall: 0.75,
+      f1_score: 0.81,
+    },
+    hallucination_count: 0,
+    hallucination_details: [],
+    five_ws: {
+      who: true,
+      what: true,
+      where: true,
+      when: false,
+      why: true,
+    },
+    missed_indicators: ['Unusual round-trip transfers'],
   },
-  {
-    case_id: 'ARGUS-002',
-    status: 'RUNNING',
-    detected_typology: 'Structuring',
-    confidence_score: 0.45,
-  },
-  {
-    case_id: 'ARGUS-003',
-    status: 'COMPLETE',
-    detected_typology: 'Structuring',
-    confidence_score: 0.92,
-  },
-];
-
-const mockAssessment = {
-  overall_score: 0.82,
-  rubric_breakdown: {
-    pattern: { weight: 0.28, score: 85 },
-    evidence: { weight: 0.20, score: 72 },
-    narrative: { weight: 0.16, score: 60 },
-    completeness: { weight: 0.16, score: 90 },
-    efficiency: { weight: 0.20, score: 78 },
-  },
-  entity_metrics: {
-    precision: 0.88,
-    recall: 0.75,
-    f1_score: 0.81,
-  },
-  hallucination_count: 0,
-  hallucination_details: [],
-  five_ws: {
-    who: true,
-    what: true,
-    where: true,
-    when: false,
-    why: true,
-  },
-  missed_indicators: ['Unusual round-trip transfers'],
-};
+}));
 
 vi.mock('@/api/client', () => ({
   getInvestigations: vi.fn().mockResolvedValue(mockInvestigations),
   runAssessment: vi.fn().mockResolvedValue(mockAssessment),
 }));
 
-// Mock framer-motion to avoid animation issues in tests
-vi.mock('framer-motion', async () => {
-  const actual = await vi.importActual('framer-motion');
+// Mock ResponsiveContainer for Recharts (jsdom has no layout engine)
+vi.mock('recharts', async (importOriginal) => {
+  const actual = await importOriginal();
   return {
     ...actual,
-    motion: new Proxy(actual.motion, {
-      get(target, prop) {
-        // Return a forwardRef wrapper that passes through props
-        if (typeof prop === 'string' && !target[prop]) {
-          return prop;
-        }
-        return target[prop];
-      },
-    }),
+    ResponsiveContainer: ({ children }) => (
+      <div style={{ width: 400, height: 280 }}>{children}</div>
+    ),
   };
 });
 

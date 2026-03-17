@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import PageHeader from '@/components/shared/PageHeader';
 import NetworkGraph from '@/components/graph/NetworkGraph';
 import NodeDetailPanel from '@/components/graph/NodeDetailPanel';
@@ -9,12 +9,36 @@ import { getGraphVisualization } from '@/api/client';
 
 export default function GraphExplorer() {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const graphRef = useRef(null);
   const { data: graphData, loading, error, refetch } = useQuery(
     'graph-viz', () => getGraphVisualization(500)
   );
 
   const handleNodeSelect = useCallback((nodeId) => {
     setSelectedNodeId(nodeId);
+  }, []);
+
+  // Keyboard shortcuts: +/= zoom in, - zoom out, 0 fit, Escape deselect
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      switch (e.key) {
+        case '+': case '=':
+          graphRef.current?.zoomIn();
+          break;
+        case '-':
+          graphRef.current?.zoomOut();
+          break;
+        case '0':
+          graphRef.current?.fitView();
+          break;
+        case 'Escape':
+          setSelectedNodeId(null);
+          break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   if (loading) {
@@ -47,6 +71,7 @@ export default function GraphExplorer() {
         {/* Graph Canvas */}
         <div className={`relative transition-all duration-300 ${selectedNodeId ? 'w-[60%]' : 'w-full'}`}>
           <NetworkGraph
+            ref={graphRef}
             nodes={graphData?.nodes || []}
             edges={graphData?.edges || []}
             onNodeSelect={handleNodeSelect}

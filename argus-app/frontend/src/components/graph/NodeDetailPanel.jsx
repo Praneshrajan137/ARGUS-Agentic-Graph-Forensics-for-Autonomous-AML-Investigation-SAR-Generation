@@ -17,8 +17,8 @@ export default function NodeDetailPanel({ nodeId, onClose }) {
     `node-conn-${nodeId}`, () => getNodeConnections(nodeId), { enabled: !!nodeId }
   );
 
-  const transactions = txData?.transactions || txData || [];
-  const connections = connData?.connections || connData || [];
+  const transactions = Array.isArray(txData) ? txData : (txData?.transactions ?? []);
+  const connections = Array.isArray(connData) ? connData : (connData?.connections ?? []);
 
   return (
     <AnimatePresence>

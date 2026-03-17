@@ -73,6 +73,13 @@ export default function InvestigationForm({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   // Debounced search
   const handleSearchChange = useCallback((value) => {
     setSearchQuery(value);
