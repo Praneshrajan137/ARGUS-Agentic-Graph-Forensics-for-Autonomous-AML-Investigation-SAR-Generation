@@ -1,0 +1,101 @@
+# .cursorrules — ARGUS Full-Stack Build v6.0
+
+## Project
+ARGUS: Production-grade financial crime investigation platform.
+Backend: FastAPI + NetworkX + Faker (Python 3.11+)
+Frontend: React 18 + Vite + Tailwind CSS v3 + D3.js v7 + Recharts + Framer Motion + Lucide React
+
+## Architecture Rules
+1. Decimal(str(value)) for ALL monetary amounts. NEVER float for storage.
+2. NetworkX MultiDiGraph. NEVER DiGraph. NEVER undirected.
+3. Iterative DFS only. NEVER recursive.
+4. sorted() on ALL set/dict iteration for determinism.
+5. Frontend: ALL data from real API calls. NO mocked data. NO hardcoded values.
+6. PYTHONHASHSEED=0 for all Python processes.
+7. NEVER import from src.core.a2a_interface (creates second FastAPI app).
+8. All components reference CSS custom properties. NEVER raw hex in JSX.
+9. Node IDs are ALWAYS strings in API responses and frontend state.
+10. Framer Motion for all animations. NO raw CSS transitions for component enter/exit.
+
+## Import Strategy (v5.0 COPY approach with constant remapping)
+FORGE modules: import normally via sys.path (project root).
+TRACER modules: COPIED into tracer_service.py.
+Assessment functions: COPIED into assessment_service.py.
+
+## Constant Remapping (v5.0 — CRITICAL)
+FORGE → TRACER aliases in tracer_service.py:
+  LAYERING_MIN_DECAY → DECAY_RATE_MIN
+  LAYERING_MAX_DECAY → DECAY_RATE_MAX
+  SPACY_MODEL_NAME = "en_core_web_sm" (local, not in FORGE config)
+
+## Field Name Mapping (FORGE → TRACER)
+  Edge: transaction_id → id, transaction_type → type (uppercased), timestamp: datetime → int
+  Node: int ID → str ID, swift → swift_code, country → jurisdiction
+  Node: risk_score (float) → risk_rating (str: low/medium/high)
+  Node: entity_type: person → individual, company → business
+  Evidence: body/narrative → content
+
+## Design System — "Forensic Elegance" (LIGHT THEME)
+Typography:
+  Display: Instrument Serif (headings, page titles)
+  Body: DM Sans (UI text, labels, paragraphs)
+  Data: JetBrains Mono (numbers, IDs, amounts, timestamps)
+
+Colors (CSS custom properties only):
+  Surface: --surface-0 #fff, --surface-1 #f8fafc, --surface-2 #f1f5f9, --surface-3 #e2e8f0
+  Text: --text-0 #0f172a, --text-1 #334155, --text-2 #64748b, --text-3 #94a3b8
+  Accent: --accent-base #4f46e5, --accent-hover #4338ca, --accent-tint #eef2ff (indigo)
+  Status: amber=structuring, violet=layering, rose=danger/mule, emerald=success, cyan=info
+  Chart: #4f46e5, #d97706, #7c3aed, #059669, #e11d48, #0891b2
+
+Layout:
+  Max width: 1440px, sidebar 260px, card radius 12px
+  Shadows: subtle, layered (xs through xl)
+  No dark backgrounds. Lightest is #ffffff, darkest card bg is #f1f5f9.
+
+Animation (Framer Motion):
+  Page entrance: stagger 50ms, fadeUp (y:12→0, opacity)
+  Card hover: scale 1.005, shadow elevation, spring(400, 25)
+  Number countup: easeOutExpo, 800ms
+  Graph transitions: spring(300, 20)
+
+## Backend Rules
+- Pydantic v2 with field_serializer for Decimal
+- FastAPI with CORS allow_origins=["*"]
+- Lifespan hook auto-generates graph on startup
+- In-memory AppState singleton
+- DecimalJSONResponse with json.dumps(default=str)
+
+## Frontend Rules
+- @/ alias for src/ directory (clean imports)
+- useQuery hook for ALL data fetching (dedup + cache)
+- ErrorCard with retry on all pages
+- Skeleton loading states (shimmer)
+- No console.log in production code
+- Canvas renderer for D3 graph (not SVG) at 500+ nodes
+
+## Detection Rules
+- Structuring: BFS fan-in, [$9K-$9.8K] USD, 10+ in 48hr
+- Layering: Iterative DFS, 3+ hops, 2-5% decay, 12hr max between hops
+- Currency isolation: group by currency BEFORE threshold
+- Super-node skip: degree > 500
+- Path explosion: stop DFS after 1000 chains
+
+## Pipeline (8 steps)
+receive → analyze → detect → synthesize → compute_confidence → draft → validate → submit
+
+## Anti-Patterns (FORBIDDEN)
+- float for money (use Decimal)
+- nx.DiGraph (use MultiDiGraph)
+- recursive DFS (use iterative stack)
+- import from src.core.a2a_interface
+- mocked/hardcoded frontend data
+- dark backgrounds / dark theme
+- bare except: (always specific exception types)
+- list(set(...)) without sorted()
+- import * (explicit named imports only)
+- importing DECAY_RATE_MIN directly from src.config (use LAYERING_MIN_DECAY + alias)
+- SVG for graph rendering at 500+ nodes (use Canvas)
+- raw hex colors in JSX (use CSS variables)
+- Inter, Roboto, Arial fonts (use Instrument Serif / DM Sans / JetBrains Mono)
+- purple gradients on white backgrounds (use indigo accents with semantic color roles)

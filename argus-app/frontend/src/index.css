@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══ ARGUS DESIGN SYSTEM v6.0 — "FORENSIC ELEGANCE" ═══ */
+
+:root {
+  /* Surface hierarchy */
+  --surface-0: #ffffff;
+  --surface-1: #f8fafc;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+
+  /* Text hierarchy */
+  --text-0: #0f172a;
+  --text-1: #334155;
+  --text-2: #64748b;
+  --text-3: #94a3b8;
+
+  /* Accent — Indigo */
+  --accent-base: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-tint: #eef2ff;
+
+  /* Status — Amber (structuring) */
+  --amber-base: #d97706;
+  --amber-hover: #b45309;
+  --amber-tint: #fef3c7;
+
+  /* Status — Violet (layering) */
+  --violet-base: #7c3aed;
+  --violet-hover: #6d28d9;
+  --violet-tint: #ede9fe;
+
+  /* Status — Rose (danger/criminal) */
+  --rose-base: #e11d48;
+  --rose-hover: #be123c;
+  --rose-tint: #ffe4e6;
+
+  /* Status — Emerald (success/clean) */
+  --emerald-base: #059669;
+  --emerald-hover: #047857;
+  --emerald-tint: #d1fae5;
+
+  /* Status — Cyan (info/interactive) */
+  --cyan-base: #0891b2;
+  --cyan-hover: #0e7490;
+  --cyan-tint: #cffafe;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.08), 0 8px 10px rgba(0, 0, 0, 0.04);
+
+  /* Sidebar */
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 72px;
+
+  /* Transitions */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  /* SAR Document Tokens (paper metaphor) */
+  --sar-bg: #fafaf8;
+  --sar-border: #e8e5de;
+  --sar-text: #1a1a1a;
+  --sar-heading: #0f172a;
+  --sar-label: #64748b;
+  --sar-watermark: rgba(226, 232, 240, 0.3);
+}
+
+/* ═══ BASE ═══ */
+
+body {
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}
+
+/* Subtle dot grid background for depth */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle at 1px 1px, var(--surface-3) 0.5px, transparent 0.5px);
+  background-size: 32px 32px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ═══ SCROLLBAR ═══ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ═══ SKELETON LOADING ═══ */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-1) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ═══ TYPOGRAPHY UTILITIES ═══ */
+.font-display { font-family: 'Instrument Serif', Georgia, serif; }
+.font-data { font-family: 'JetBrains Mono', Consolas, monospace; }
+
+/* ═══ FOCUS RING ═══ */
+:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ═══ SELECTION ═══ */
+::selection {
+  background: var(--accent-tint);
+  color: var(--accent-base);
+}
+
+/* ═══ PRINT STYLES (SAR Documents) ═══ */
+@media print {
+  body { background: white !important; }
+  body::before { display: none !important; }
+  aside, nav, button, [data-no-print] { display: none !important; }
+  main { margin-left: 0 !important; }
+  .rounded-card { border-radius: 0 !important; }
+}
+
+/* ═══ RANGE SLIDER TRACK (Settings) ═══ */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+/* ═══ LINE CLAMP UTILITY ═══ */
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
