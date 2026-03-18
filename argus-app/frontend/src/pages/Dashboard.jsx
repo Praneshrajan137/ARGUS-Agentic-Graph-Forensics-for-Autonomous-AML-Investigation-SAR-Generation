@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import { Network, FileText, AlertTriangle, Shield, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import PageHeader from '@/components/shared/PageHeader';
 import StatCard from '@/components/shared/StatCard';
 import { StatCardSkeleton } from '@/components/shared/Skeleton';
 import ErrorCard from '@/components/shared/ErrorCard';
@@ -19,6 +18,35 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
 };
 
+function HeroBanner() {
+  return (
+    <GlowCard className="p-6 border-l-4 border-accent mb-8">
+      <div className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center flex-shrink-0 shadow-md">
+            <Shield className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="font-display text-4xl text-text-0 tracking-tight leading-none">ARGUS</h1>
+            <p className="font-mono text-[11px] tracking-widest uppercase text-accent/70 mt-1.5">
+              Agentic Graph Forensics for Autonomous AML Investigation &amp; SAR Generation
+            </p>
+            <p className="text-sm text-text-2 mt-2">
+              Autonomous financial crime detection powered by graph intelligence
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/graph"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-btn hover:bg-accent-hover transition-colors shadow-sm flex-shrink-0"
+        >
+          Explore Graph <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+    </GlowCard>
+  );
+}
+
 export default function Dashboard() {
   const { data: health, loading: healthLoading } = useQuery('health', getHealth);
   const { data: stats, loading: statsLoading, error, refetch } = useQuery(
@@ -28,7 +56,7 @@ export default function Dashboard() {
   if (healthLoading || (health?.graph_loaded && statsLoading)) {
     return (
       <div>
-        <PageHeader title="Dashboard" subtitle="Financial crime intelligence overview" />
+        <HeroBanner />
         <div className="grid grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <StatCardSkeleton key={i} />)}
         </div>
@@ -39,7 +67,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Dashboard" subtitle="Financial crime intelligence overview" />
+        <HeroBanner />
         <ErrorCard error={error} onRetry={refetch} />
       </div>
     );
@@ -48,7 +76,7 @@ export default function Dashboard() {
   if (!health?.graph_loaded) {
     return (
       <div>
-        <PageHeader title="Dashboard" subtitle="Financial crime intelligence overview" />
+        <HeroBanner />
         <GlowCard className="p-12 text-center">
           <div className="animate-pulse text-text-2">
             <p className="font-display text-xl text-text-1 mb-2">Generating Financial World...</p>
@@ -61,17 +89,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Financial crime intelligence overview"
-      >
-        <Link
-          to="/graph"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-btn hover:bg-accent-hover transition-colors shadow-sm"
-        >
-          Explore Graph <ArrowRight className="w-4 h-4" />
-        </Link>
-      </PageHeader>
+      <HeroBanner />
 
       <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-8">
         {/* Stat Cards Row */}

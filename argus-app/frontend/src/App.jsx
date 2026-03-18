@@ -12,6 +12,7 @@ import Evidence from '@/pages/Evidence';
 import Assessment from '@/pages/Assessment';
 import Benchmark from '@/pages/Benchmark';
 import SettingsPage from '@/pages/Settings';
+import Vision from '@/pages/Vision';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/evidence" element={<Evidence />} />
             <Route path="/assessment" element={<Assessment />} />
             <Route path="/benchmark" element={<Benchmark />} />
+            <Route path="/vision" element={<Vision />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

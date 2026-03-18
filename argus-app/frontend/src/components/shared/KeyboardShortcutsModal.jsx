@@ -10,7 +10,8 @@ const SHORTCUTS = [
   { keys: ['5'], desc: 'Go to Evidence' },
   { keys: ['6'], desc: 'Go to Assessment' },
   { keys: ['7'], desc: 'Go to Benchmark' },
-  { keys: ['8'], desc: 'Go to Settings' },
+  { keys: ['8'], desc: 'Go to Vision' },
+  { keys: ['9'], desc: 'Go to Settings' },
   { keys: ['Esc'], desc: 'Close modal / panel' },
 ];
 

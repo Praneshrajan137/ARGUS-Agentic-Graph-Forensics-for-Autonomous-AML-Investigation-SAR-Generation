@@ -3,7 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Network, Search, FileText,
-  FolderOpen, BarChart3, Zap, Settings, ChevronLeft,
+  FolderOpen, BarChart3, Zap, Eye, Settings, ChevronLeft,
   ChevronRight, Shield
 } from 'lucide-react';
 import { useQuery } from '@/hooks/useQuery';
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { path: '/evidence', label: 'Evidence', icon: FolderOpen },
   { path: '/assessment', label: 'Assessment', icon: BarChart3 },
   { path: '/benchmark', label: 'Benchmark', icon: Zap },
+  { path: '/vision', label: 'Vision', icon: Eye },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -145,7 +146,8 @@ export default function Layout() {
     { key: '5', handler: () => navigate('/evidence') },
     { key: '6', handler: () => navigate('/assessment') },
     { key: '7', handler: () => navigate('/benchmark') },
-    { key: '8', handler: () => navigate('/settings') },
+    { key: '8', handler: () => navigate('/vision') },
+    { key: '9', handler: () => navigate('/settings') },
   ]);
 
   return (
