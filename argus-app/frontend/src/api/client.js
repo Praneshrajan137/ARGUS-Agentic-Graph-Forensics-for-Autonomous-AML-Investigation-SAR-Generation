@@ -8,6 +8,9 @@ const BASE = '/api';
 /** Default timeout: 10s for reads, overridden per-call for long operations */
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** Stale-state detection: tracks backend generation epoch */
+let _epoch = null;
+
 export class ApiError extends Error {
   constructor(status, statusText, body) {
     const detail = body?.detail || statusText;
@@ -49,6 +52,17 @@ async function request(path, options = {}) {
     let body;
     try { body = await response.json(); } catch { body = null; }
     throw new ApiError(response.status, response.statusText, body);
+  }
+
+  // Track server epoch for stale-state detection
+  const serverEpoch = parseInt(response.headers.get('X-ARGUS-Epoch'), 10);
+  if (!isNaN(serverEpoch)) {
+    if (_epoch !== null && serverEpoch !== _epoch) {
+      window.dispatchEvent(new CustomEvent('argus:epoch-change', {
+        detail: { prev: _epoch, next: serverEpoch },
+      }));
+    }
+    _epoch = serverEpoch;
   }
 
   return response.json();
@@ -111,6 +125,18 @@ export const runAssessment = (caseId) =>
 export const getGroundTruthSummary = () => request('/ground-truth/summary');
 
 export const getConfig = () => request('/config');
+
+// ═══ BENCHMARK ═══
+export const runBenchmark = (params) =>
+  request('/benchmark/run', { method: 'POST', body: JSON.stringify(params), timeout: 10_000 });
+
+export const getBenchmark = (benchmarkId) =>
+  request(`/benchmark/${benchmarkId}`, { timeout: 30_000 });
+
+export const getBenchmarkProgress = (benchmarkId) =>
+  request(`/benchmark/${benchmarkId}/progress`);
+
+export const getBenchmarks = () => request('/benchmark/list');
 
 // ═══ RESET ═══
 export const resetState = () => request('/reset', { method: 'POST' });

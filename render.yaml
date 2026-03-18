@@ -1,0 +1,22 @@
+# Render.com deployment configuration for ARGUS
+services:
+  - type: web
+    name: argus
+    runtime: docker
+    dockerfilePath: argus-app/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ARGUS_ENV
+        value: production
+      - key: SEED
+        value: "42"
+      - key: DIFFICULTY
+        value: "5"
+      - key: GRAPH_SIZE
+        value: "500"
+      - key: PORT
+        value: "8000"
+      - key: PYTHONPATH
+        value: /app

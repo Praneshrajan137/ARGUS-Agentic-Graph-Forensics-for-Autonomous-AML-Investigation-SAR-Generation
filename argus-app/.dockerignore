@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Dev tooling
+.git/
+.github/
+.vscode/
+.claude/
+*.md
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+e2e-smoke.sh
+
+# Environment
+.env
+.env.*

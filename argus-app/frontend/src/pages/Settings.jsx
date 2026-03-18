@@ -14,6 +14,7 @@ import GlowCard from '@/components/shared/GlowCard';
 import ErrorCard from '@/components/shared/ErrorCard';
 import { useQuery, invalidateQueries } from '@/hooks/useQuery';
 import { getConfig, getHealth, generateWorld, resetState } from '@/api/client';
+import { useToast } from '@/contexts/ToastContext';
 
 const stagger = {
   hidden: {},
@@ -43,6 +44,7 @@ const DIFFICULTY_LABELS = {
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const { data: config } = useQuery('config', getConfig);
   const { data: health } = useQuery('health-settings', getHealth);
 
@@ -81,6 +83,7 @@ export default function Settings() {
 
       clearInterval(interval);
       setGeneratePhase('Complete!');
+      addToast(`Financial world generated — seed ${seed}, ${nodeCount} nodes`, 'success');
 
       // Invalidate all cached queries
       invalidateQueries('');
@@ -93,6 +96,7 @@ export default function Settings() {
     } catch (err) {
       setGenerating(false);
       setGenerateError(err);
+      addToast(`Generation failed: ${err.message}`, 'error');
     }
   };
 
@@ -101,10 +105,12 @@ export default function Settings() {
     try {
       await resetState();
       invalidateQueries('');
+      addToast('All data has been reset.', 'warning');
       setShowResetConfirm(false);
       navigate('/');
     } catch (err) {
       setGenerateError(err);
+      addToast(`Reset failed: ${err.message}`, 'error');
     } finally {
       setResetting(false);
     }

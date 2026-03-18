@@ -7,6 +7,7 @@ import InvestigationForm from '@/components/investigation/InvestigationForm';
 import PipelineTracker from '@/components/investigation/PipelineTracker';
 import InvestigationResults from '@/components/investigation/InvestigationResults';
 import { runInvestigation } from '@/api/client';
+import { useToast } from '@/contexts/ToastContext';
 
 /** Page-level stagger animation */
 const stagger = {
@@ -87,6 +88,7 @@ function updatePipelineFromResult(result) {
  */
 export default function Investigation() {
   const [searchParams] = useSearchParams();
+  const { addToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pipelineState, setPipelineState] = useState({});
   const [result, setResult] = useState(null);
@@ -152,6 +154,7 @@ export default function Investigation() {
 
         setResult(response);
         setPipelineState(updatePipelineFromResult(response));
+        addToast(`Investigation complete — case ${response.case_id || 'unknown'}`, 'success');
       } catch (err) {
         // Stop animation
         if (intervalRef.current) {
@@ -161,6 +164,7 @@ export default function Investigation() {
 
         setError(err.message || 'Investigation failed');
         setResult({ status: 'FAILED', error: err.message });
+        addToast(`Investigation failed: ${err.message}`, 'error');
 
         // Mark current and remaining steps as failed/skipped
         setPipelineState((prev) => {
@@ -180,7 +184,7 @@ export default function Investigation() {
         setIsSubmitting(false);
       }
     },
-    [startPipelineAnimation]
+    [startPipelineAnimation, addToast]
   );
 
   const hasStarted = isSubmitting || Object.keys(pipelineState).length > 0;

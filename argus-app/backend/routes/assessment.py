@@ -21,6 +21,7 @@ from src.config import (
     CONFIDENCE_THRESHOLD,
 )
 
+import time
 from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["assessment"])
@@ -97,6 +98,7 @@ async def generate_graph(request: GenerateRequest):
         difficulty=request.difficulty,
         node_count=request.node_count,
     )
+    state.generation_epoch = time.time()
 
     return GenerateResponse(
         status="generated",

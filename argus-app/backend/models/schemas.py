@@ -259,3 +259,76 @@ class ConfigResponse(BaseModel):
     min_chain_length: int
     max_dfs_depth: int
     confidence_threshold: float
+
+# ═══ BENCHMARK ═══
+
+class BenchmarkRequest(BaseModel):
+    mode: str = Field(default="fast", pattern=r"^(fast|full)$")
+    hop_depth: int = Field(default=3, ge=1, le=10)
+    jurisdiction: str = Field(default="fincen", pattern=r"^(fincen|fiu_ind)$")
+    generate: bool = False
+    seed: int = Field(default=42, ge=0, le=2**31 - 1)
+    difficulty: int = Field(default=5, ge=1, le=10)
+    node_count: int = Field(default=1000, ge=50, le=5000)
+
+class BenchmarkNodeResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    node_id: str
+    is_crime_node: bool
+    expected_typology: str
+    detected_typology: str
+    correct: bool
+    confidence: float
+    investigation_case_id: str
+    assessment_score: float
+    duration_ms: int
+    entity_precision: float
+    entity_recall: float
+    entity_f1: float
+
+class BenchmarkAggregateMetrics(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    total_investigations: int
+    completed: int
+    failed: int
+    structuring_detected: bool
+    layering_detected: bool
+    crime_detection_rate: float
+    false_positive_rate: float
+    avg_precision: float
+    avg_recall: float
+    avg_f1: float
+    avg_confidence: float
+    avg_assessment_score: float
+    total_duration_ms: int
+    avg_duration_ms: float
+    structuring_detection_rate: float
+    layering_detection_rate: float
+
+class BenchmarkResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="allow")
+    benchmark_id: str
+    status: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    progress: float = 0.0
+    current_node: str = ""
+    completed_count: int = 0
+    total_count: int = 0
+    aggregate: BenchmarkAggregateMetrics | None = None
+    node_results: list[BenchmarkNodeResult] = Field(default_factory=list)
+    started_at: str = ""
+    completed_at: str | None = None
+
+class BenchmarkProgressResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    benchmark_id: str
+    status: str
+    progress: float = 0.0
+    current_node: str = ""
+    completed_count: int = 0
+    total_count: int = 0
+
+class BenchmarkListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    benchmarks: list[BenchmarkResponse]
+    total: int

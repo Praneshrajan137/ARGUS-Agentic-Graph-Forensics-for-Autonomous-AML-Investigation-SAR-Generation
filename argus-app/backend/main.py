@@ -13,9 +13,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 # ── sys.path setup ──
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI):
     try:
         generate_world(seed=seed, difficulty=difficulty, node_count=graph_size)
         state = get_state()
+        state.generation_epoch = time.time()
         elapsed = time.time() - t0
         logger.info(
             "World generated in %.2fs — %d nodes, %d edges, %d evidence docs",
@@ -105,7 +107,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-ARGUS-Epoch"],
 )
+
+
+# ── Epoch middleware — sends generation epoch on every response ──
+@app.middleware("http")
+async def epoch_header(request: Request, call_next):
+    response = await call_next(request)
+    state = get_state()
+    response.headers["X-ARGUS-Epoch"] = str(int(state.generation_epoch))
+    return response
+
 
 # ── Register routers ──
 from .routes.health import router as health_router
@@ -113,12 +126,44 @@ from .routes.graph import router as graph_router
 from .routes.investigation import router as investigation_router
 from .routes.evidence import router as evidence_router
 from .routes.assessment import router as assessment_router
+from .routes.benchmark import router as benchmark_router
 
 app.include_router(health_router)
 app.include_router(graph_router)
 app.include_router(investigation_router)
 app.include_router(evidence_router)
 app.include_router(assessment_router)
+app.include_router(benchmark_router)
+
+# ── Production mode: serve frontend static files ──
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+_BACKEND_STATIC = Path(__file__).resolve().parent / "static"
+_STATIC_DIR = _BACKEND_STATIC if _BACKEND_STATIC.is_dir() else _FRONTEND_DIST
+
+if _STATIC_DIR.is_dir() and os.getenv("ARGUS_ENV") == "production":
+    logger.info("Production mode: serving frontend from %s", _STATIC_DIR)
+
+    if (_STATIC_DIR / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="static-assets")
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def favicon():
+        fav = _STATIC_DIR / "favicon.svg"
+        if fav.exists():
+            return FileResponse(str(fav), media_type="image/svg+xml")
+        return JSONResponse({"error": "not found"}, status_code=404)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_catch_all(full_path: str):
+        if full_path.startswith("api/"):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        index = _STATIC_DIR / "index.html"
+        if index.exists():
+            return FileResponse(str(index), media_type="text/html")
+        return JSONResponse({"error": "frontend not built"}, status_code=404)
+
+    logger.info("SPA catch-all enabled for React Router deep links")
+
 
 # ── Logging setup ──
 logging.basicConfig(

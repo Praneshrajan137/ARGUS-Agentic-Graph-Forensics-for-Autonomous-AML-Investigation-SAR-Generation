@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Network, Search, FileText,
-  FolderOpen, BarChart3, Settings, ChevronLeft,
+  FolderOpen, BarChart3, Zap, Settings, ChevronLeft,
   ChevronRight, Shield
 } from 'lucide-react';
 import { useQuery } from '@/hooks/useQuery';
 import { getHealth } from '@/api/client';
+import { useHotkeys } from '@/hooks/useHotkeys';
+import KeyboardShortcutsModal from '@/components/shared/KeyboardShortcutsModal';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -16,6 +18,15 @@ const NAV_ITEMS = [
   { path: '/sar', label: 'SAR Viewer', icon: FileText },
   { path: '/evidence', label: 'Evidence', icon: FolderOpen },
   { path: '/assessment', label: 'Assessment', icon: BarChart3 },
+  { path: '/benchmark', label: 'Benchmark', icon: Zap },
+  { path: '/settings', label: 'Settings', icon: Settings },
+];
+
+const MOBILE_NAV_ITEMS = [
+  { path: '/', label: 'Home', icon: LayoutDashboard },
+  { path: '/graph', label: 'Graph', icon: Network },
+  { path: '/investigate', label: 'Investigate', icon: Search },
+  { path: '/sar', label: 'SAR', icon: FileText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -24,6 +35,7 @@ function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
+      data-sidebar="desktop"
       className="fixed top-0 left-0 h-screen bg-surface-0 border-r border-surface-3 z-40 flex flex-col transition-all duration-300 ease-out"
       style={{ width: collapsed ? 72 : 260 }}
     >
@@ -94,14 +106,52 @@ function Sidebar({ collapsed, onToggle }) {
   );
 }
 
+function MobileBottomNav() {
+  return (
+    <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 bg-surface-0 border-t border-surface-3 z-40 items-center justify-around py-2 safe-area-bottom">
+      {MOBILE_NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+        <NavLink
+          key={path}
+          to={path}
+          end={path === '/'}
+          className={({ isActive }) =>
+            `flex-1 flex flex-col items-center gap-0.5 py-1 text-[10px] font-medium transition-colors ${
+              isActive ? 'text-accent' : 'text-text-3'
+            }`
+          }
+        >
+          <Icon className="w-5 h-5" />
+          <span>{label}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useHotkeys([
+    { key: '?', handler: () => setShortcutsOpen((v) => !v) },
+    { key: 'Escape', handler: () => setShortcutsOpen(false) },
+    { key: '1', handler: () => navigate('/') },
+    { key: '2', handler: () => navigate('/graph') },
+    { key: '3', handler: () => navigate('/investigate') },
+    { key: '4', handler: () => navigate('/sar') },
+    { key: '5', handler: () => navigate('/evidence') },
+    { key: '6', handler: () => navigate('/assessment') },
+    { key: '7', handler: () => navigate('/benchmark') },
+    { key: '8', handler: () => navigate('/settings') },
+  ]);
 
   return (
     <div className="min-h-screen">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <main
+        data-main-content
         className="transition-all duration-300 ease-out min-h-screen"
         style={{ marginLeft: collapsed ? 72 : 260 }}
       >
@@ -119,6 +169,8 @@ export default function Layout() {
           </AnimatePresence>
         </div>
       </main>
+      <MobileBottomNav />
+      <KeyboardShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }

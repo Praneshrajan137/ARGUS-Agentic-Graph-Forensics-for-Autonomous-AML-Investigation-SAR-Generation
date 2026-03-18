@@ -3,6 +3,8 @@
 Thread-safe for single-process FastAPI with uvicorn.
 Graph is always MultiDiGraph (Rule 2). Node IDs stored as strings (Rule 8).
 """
+import time
+
 import networkx as nx
 from dataclasses import dataclass, field
 from typing import Any
@@ -22,11 +24,13 @@ class AppState:
     ground_truth: dict = field(default_factory=dict)
     evidence_documents: list[dict[str, Any]] = field(default_factory=list)
     investigations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    benchmarks: dict[str, dict[str, Any]] = field(default_factory=dict)
     seed: int = 42
     difficulty: int = 5
     graph_size: int = 1000
     generated_at: str | None = None
     generation_error: str | None = None
+    generation_epoch: float = field(default_factory=time.time)
 
 
 _state = AppState()
