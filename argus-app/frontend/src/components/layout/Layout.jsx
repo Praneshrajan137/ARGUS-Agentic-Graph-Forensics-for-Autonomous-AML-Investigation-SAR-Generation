@@ -34,75 +34,76 @@ function Sidebar({ collapsed, onToggle }) {
   const { data: health } = useQuery('health', getHealth, { staleTime: 10000 });
 
   return (
-    <aside
-      data-sidebar="desktop"
-      className="fixed top-0 left-0 h-screen bg-surface-0 border-r border-surface-3 z-40 flex flex-col transition-all duration-300 ease-out"
-      style={{ width: collapsed ? 72 : 260 }}
-    >
-      {/* Logo */}
-      <div className="h-16 flex items-center px-5 border-b border-surface-3">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0">
-            <Shield className="w-4 h-4 text-white" />
+    <div data-sidebar="desktop" className="fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-out" style={{ width: collapsed ? 72 : 260 }}>
+      <aside
+        className="h-full bg-surface-0 border-r border-surface-3 flex flex-col"
+      >
+        {/* Logo */}
+        <div className="h-16 flex items-center px-5 border-b border-surface-3">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center flex-shrink-0">
+              <Shield className="w-4 h-4 text-white" />
+            </div>
+            {!collapsed && (
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex flex-col"
+              >
+                <span className="font-display text-lg text-text-0 tracking-tight leading-none">ARGUS</span>
+                <span className="text-[10px] font-mono text-text-3 tracking-widest uppercase">AML Platform</span>
+              </motion.div>
+            )}
           </div>
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex flex-col"
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+          {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+            <NavLink
+              key={path}
+              to={path}
+              end={path === '/'}
+              className={({ isActive }) =>
+                `group flex items-center gap-3 px-3 py-2.5 rounded-btn text-sm font-medium transition-all duration-150 ${
+                  isActive
+                    ? 'bg-accent-tint text-accent'
+                    : 'text-text-2 hover:text-text-0 hover:bg-surface-2'
+                }`
+              }
             >
-              <span className="font-display text-lg text-text-0 tracking-tight leading-none">ARGUS</span>
-              <span className="text-[10px] font-mono text-text-3 tracking-widest uppercase">AML Platform</span>
-            </motion.div>
-          )}
+              <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+              {!collapsed && <span className="truncate">{label}</span>}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Footer — Health status */}
+        <div className="p-4 border-t border-surface-3">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                health?.graph_loaded ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+              }`}
+            />
+            {!collapsed && (
+              <span className="text-xs font-mono text-text-3">
+                v{health?.unified_version || '...'} · {health?.node_count || 0} nodes
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
-          <NavLink
-            key={path}
-            to={path}
-            end={path === '/'}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 px-3 py-2.5 rounded-btn text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-accent-tint text-accent'
-                  : 'text-text-2 hover:text-text-0 hover:bg-surface-2'
-              }`
-            }
-          >
-            <Icon className="w-[18px] h-[18px] flex-shrink-0" />
-            {!collapsed && <span className="truncate">{label}</span>}
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* Footer — Health status */}
-      <div className="p-4 border-t border-surface-3">
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              health?.graph_loaded ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
-            }`}
-          />
-          {!collapsed && (
-            <span className="text-xs font-mono text-text-3">
-              v{health?.unified_version || '...'} · {health?.node_count || 0} nodes
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Collapse toggle */}
+      {/* Collapse toggle — outside aside so it's never clipped */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-surface-0 border border-surface-3 shadow-sm flex items-center justify-center text-text-3 hover:text-text-1 hover:shadow-md transition-all"
+        className="absolute -right-3.5 top-20 w-7 h-7 rounded-full bg-surface-0 border border-surface-3 shadow-sm flex items-center justify-center text-text-3 hover:text-text-1 hover:bg-surface-1 hover:shadow-md transition-all cursor-pointer z-50"
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
       </button>
-    </aside>
+    </div>
   );
 }
 
