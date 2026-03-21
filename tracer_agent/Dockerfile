@@ -66,6 +66,10 @@ COPY --from=builder /install/bin /usr/local/bin
 # [MED-06] v3.0: --chown in COPY eliminates redundant chown -R layer
 COPY --chown=agent:agent . .
 
+# Create namespace symlink: 'from tracer_agent.src.xxx' resolves via
+# /app/tracer_agent/ -> /app/ -> /app/src/xxx.py
+RUN ln -s /app /app/tracer_agent
+
 # Environment: determinism + performance + logging
 ENV PYTHONHASHSEED=0 \
     PYTHONUNBUFFERED=1 \

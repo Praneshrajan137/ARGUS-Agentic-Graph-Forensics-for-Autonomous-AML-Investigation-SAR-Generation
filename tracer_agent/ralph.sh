@@ -48,7 +48,7 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
     echo "=== Ralph iteration $i / $MAX_ITERATIONS ==="
     echo ""
 
-    timeout "${TASK_TIMEOUT}s" python -m src.ralph_runner \
+    timeout "${TASK_TIMEOUT}s" python -m tracer_agent.src.ralph_runner \
         --state-dir "$STATE_DIR" \
         --prd plans/prd.json \
         --progress progress.txt &

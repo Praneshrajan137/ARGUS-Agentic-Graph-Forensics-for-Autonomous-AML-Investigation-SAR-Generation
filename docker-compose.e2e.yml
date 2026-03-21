@@ -19,7 +19,7 @@ services:
       - SAR_LLM_MODEL=gpt-4.1
       - SAR_LLM_TEMPERATURE=0.0
       - SAR_LLM_SEED=42
-    entrypoint: ["python", "-m", "src.main"]
+    entrypoint: ["python", "-m", "tracer_agent.src.main"]
     restart: "no"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]

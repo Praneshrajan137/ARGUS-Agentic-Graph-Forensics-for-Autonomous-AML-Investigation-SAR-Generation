@@ -103,10 +103,12 @@ jobs:
         continue-on-error: true
 
       - name: Run tests with coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           # Hide repo-root src/ (Forge agent) to prevent import collision.
-          # tracer_agent tests do `from src.core.xxx import ...` — without this,
-          # Python can resolve to ../src/core/ which imports faker (not installed).
+          # tracer_agent tests do `from tracer_agent.src.core.xxx import ...` —
+          # PYTHONPATH points to repo root so the tracer_agent package is found.
           mv ../src ../src_forge_hidden
           pytest tests/ \
             --cov=src \
@@ -156,4 +158,4 @@ jobs:
 
       - name: Test Tracer Agent image
         run: |
-          docker run --rm --entrypoint python tracer-agent:test -c "from src.core import graph_reasoner, a2a_client, sar_drafter; print('Tracer Agent imports OK')"
+          docker run --rm --entrypoint python tracer-agent:test -c "from tracer_agent.src.core import graph_reasoner, a2a_client, sar_drafter; print('Tracer Agent imports OK')"
