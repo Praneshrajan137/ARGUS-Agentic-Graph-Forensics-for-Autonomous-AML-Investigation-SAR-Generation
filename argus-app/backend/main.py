@@ -6,6 +6,7 @@ Lifespan hook generates the graph on startup with PYTHONHASHSEED=0.
 import json
 import logging
 import os
+import re
 import sys
 import time
 from contextlib import asynccontextmanager
@@ -27,12 +28,28 @@ from .config import API_PORT, API_HOST, UNIFIED_VERSION
 from .services.forge_service import generate_world
 from .models.state import get_state
 
-# Use tracer_agent's RedactingFormatter for credential-safe logging
-from tracer_agent.src.main import RedactingFormatter, configure_logging as _configure_tracer_logging
+# ── Credential-safe log formatter (inline — avoids importing tracer_agent.src.main
+#    which would trigger its module-level `app = create_app()` and fail because
+#    `from src.core.a2a_server import ...` resolves against the wrong sys.path) ──
+_REDACT_PATTERNS = [
+    re.compile(r'(?i)(api[_-]?key|token|secret|password|bearer)\s*[=:]\s*\S+'),
+    re.compile(r'sk-[A-Za-z0-9]{20,}'),
+]
 
-# Configure root logger with RedactingFormatter (redacts API keys, tokens, passwords)
+
+class RedactingFormatter(logging.Formatter):
+    """Formatter that redacts API keys, tokens and passwords from log output."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        for pattern in _REDACT_PATTERNS:
+            message = pattern.sub("[REDACTED]", message)
+        return message
+
+
+# Configure root logger
 _handler = logging.StreamHandler(sys.stdout)
-_handler.setFormatter(RedactingFormatter())
+_handler.setFormatter(RedactingFormatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s"))
 logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
 
 logger = logging.getLogger("argus.backend")
