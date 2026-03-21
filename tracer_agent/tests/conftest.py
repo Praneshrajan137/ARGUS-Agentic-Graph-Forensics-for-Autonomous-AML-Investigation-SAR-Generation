@@ -6,11 +6,11 @@ Every list output uses sorted() for determinism (PYTHONHASHSEED-safe).
 """
 
 # ===================================================================
-# PATH ISOLATION (must execute before ANY `from src.*` import)
+# PATH ISOLATION (must execute before ANY `from tracer_agent.src.*` import)
 # ===================================================================
 # In the monorepo, the repo root also has a `src/` package (Forge agent).
 # If the repo root is on sys.path (e.g. via PYTHONPATH, CWD, or pip),
-# Python resolves `from src.core.xxx import ...` to the WRONG package,
+# Python resolves `from tracer_agent.src.core.xxx import ...` to the WRONG package,
 # triggering `ModuleNotFoundError: No module named 'faker'` because
 # the Forge agent's src/core/__init__.py does `from .graph_generator import *`
 # which requires faker (not installed for Tracer Agent).

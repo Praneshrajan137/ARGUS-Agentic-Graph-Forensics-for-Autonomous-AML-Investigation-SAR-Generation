@@ -20,8 +20,8 @@ class TestDeterminism:
 
     def test_graph_detection_determinism(self, structuring_scenario):
         """10 runs of graph load + detection must produce identical results."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         results: list[dict] = []
 
@@ -51,7 +51,7 @@ class TestDeterminism:
 
     def test_sorted_node_iteration_across_runs(self, structuring_scenario):
         """Verify get_all_node_ids returns identical order across instantiations."""
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         orders: list[list[str]] = []
         for _ in range(5):
@@ -69,8 +69,8 @@ class TestZeroHallucination:
 
     def test_no_hallucinated_entities_in_structuring(self, structuring_scenario):
         """Every entity in StructuringResult.counterpart_nodes must exist in the graph."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)
@@ -86,8 +86,8 @@ class TestZeroHallucination:
 
     def test_no_hallucinated_entities_in_layering(self, layering_scenario):
         """Every node in LayeringResult chains must exist in the graph."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.layering import detect_layering
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.layering import detect_layering
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(layering_scenario)
@@ -104,7 +104,7 @@ class TestZeroHallucination:
 
     def test_no_hallucinated_transactions_in_sar(self, structuring_scenario):
         """SAR validation catches hallucinated TX IDs."""
-        from src.core.sar_drafter import SARDrafter, SARDraft
+        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
 
         drafter = SARDrafter()
         draft = SARDraft(
@@ -125,8 +125,8 @@ class TestRecall:
 
     def test_recall_100_percent_structuring(self, structuring_scenario):
         """All 20 injected structuring source nodes detected. Recall = 1.0."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)
@@ -147,7 +147,7 @@ class TestRecall:
 
     def test_multidiraph_preserves_all_edges(self, multi_edge_scenario):
         """3 parallel edges A→B preserved in MultiDiGraph."""
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(multi_edge_scenario)
@@ -158,8 +158,8 @@ class TestRecall:
 
     def test_confidence_score_nonzero_on_detection(self, structuring_scenario):
         """confidence_score > 0 when structuring is detected."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)
@@ -175,7 +175,7 @@ class TestMechanicalSAR:
 
     def test_mechanical_template_produces_valid_five_ws(self, structuring_scenario):
         """Mechanical template must produce all Five Ws sections."""
-        from src.core.sar_drafter import mechanical_sar_template
+        from tracer_agent.src.core.sar_drafter import mechanical_sar_template
 
         detection_results = {
             "typology": "STRUCTURING",
@@ -201,7 +201,7 @@ class TestMechanicalSAR:
 
     def test_mechanical_sar_iso_timestamps(self, structuring_scenario):
         """v8.0 [P5v8-11]: Mechanical SAR uses ISO 8601, not raw epoch."""
-        from src.core.sar_drafter import mechanical_sar_template
+        from tracer_agent.src.core.sar_drafter import mechanical_sar_template
 
         detection_results = {
             "typology": "STRUCTURING",
@@ -221,8 +221,8 @@ class TestMechanicalSAR:
 
     def test_mechanical_template_contains_only_graph_entities(self, structuring_scenario):
         """Mechanical template references only entities from the graph."""
-        from src.core.sar_drafter import mechanical_sar_template
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.sar_drafter import mechanical_sar_template
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)

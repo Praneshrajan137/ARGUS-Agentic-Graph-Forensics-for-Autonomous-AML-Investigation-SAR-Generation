@@ -12,7 +12,7 @@ import pytest
 import httpx
 
 from protos import financial_crime_pb2 as pb2
-from src.core.a2a_client import (
+from tracer_agent.src.core.a2a_client import (
     A2AClient,
     CircuitBreaker,
     CircuitBreakerOpen,

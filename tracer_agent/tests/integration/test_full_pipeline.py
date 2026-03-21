@@ -23,8 +23,8 @@ class TestStructuringEndToEnd:
 
     def test_structuring_detection_produces_result(self, structuring_scenario):
         """Full pipeline: load graph → detect structuring → get result."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)
@@ -38,8 +38,8 @@ class TestStructuringEndToEnd:
 
     def test_structuring_recall_100_percent(self, structuring_scenario):
         """All 20 criminal sources detected. Recall = 1.0."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(structuring_scenario)
@@ -65,8 +65,8 @@ class TestLayeringEndToEnd:
 
     def test_layering_detection_produces_result(self, layering_scenario):
         """Full pipeline: load graph → detect layering → get result."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.layering import detect_layering
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.layering import detect_layering
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(layering_scenario)
@@ -78,9 +78,9 @@ class TestLayeringEndToEnd:
 
     def test_layering_chain_has_decay(self, layering_scenario):
         """Detected chain has decay rates within expected range."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.layering import detect_layering
-        from src.config import DECAY_RATE_MIN, DECAY_RATE_MAX, DECAY_TOLERANCE
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.layering import detect_layering
+        from tracer_agent.src.config import DECAY_RATE_MIN, DECAY_RATE_MAX, DECAY_TOLERANCE
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(layering_scenario)
@@ -94,8 +94,8 @@ class TestLayeringEndToEnd:
 
     def test_layering_currency_filter(self, layering_scenario):
         """v8.0: detect_layering with currency param filters results."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.layering import detect_layering
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.layering import detect_layering
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(layering_scenario)
@@ -113,8 +113,8 @@ class TestCrossJurisdiction:
 
     def test_indian_structuring_detected(self, indian_scenario):
         """INR structuring scenario detected with PMLA thresholds."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(indian_scenario)
@@ -131,8 +131,8 @@ class TestCrossJurisdiction:
 
     def test_mixed_currency_separated(self, mixed_currency_scenario):
         """v8.0: USD and INR transactions on same mule are detected separately."""
-        from src.core.graph_reasoner import GraphReasoner
-        from src.core.heuristics.structuring import detect_structuring
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.heuristics.structuring import detect_structuring
 
         reasoner = GraphReasoner()
         reasoner.load_from_dict(mixed_currency_scenario)
@@ -170,8 +170,8 @@ class TestConfidenceFormula:
 
     def test_confidence_formula_single_typology_with_evidence(self):
         """Single typology + corroborating evidence → 0.3 + 0.2 = 0.5 (passes gate)."""
-        from src.core.decision_loop import compute_confidence
-        from src.config import CONFIDENCE_THRESHOLD
+        from tracer_agent.src.core.decision_loop import compute_confidence
+        from tracer_agent.src.config import CONFIDENCE_THRESHOLD
 
         state = self._make_state(typology="STRUCTURING", verdict="CORROBORATED")
         result = compute_confidence(state)
@@ -181,7 +181,7 @@ class TestConfidenceFormula:
 
     def test_confidence_formula_single_typology_no_evidence(self):
         """Single typology without evidence → 0.3 (below threshold → NONE)."""
-        from src.core.decision_loop import compute_confidence
+        from tracer_agent.src.core.decision_loop import compute_confidence
 
         state = self._make_state(typology="LAYERING", verdict="INSUFFICIENT_DATA")
         result = compute_confidence(state)
@@ -190,7 +190,7 @@ class TestConfidenceFormula:
 
     def test_confidence_formula_both_typologies(self):
         """BOTH typologies → base 0.6 (passes gate without evidence)."""
-        from src.core.decision_loop import compute_confidence
+        from tracer_agent.src.core.decision_loop import compute_confidence
 
         state = self._make_state(typology="BOTH", verdict="NOT_APPLICABLE")
         result = compute_confidence(state)
@@ -199,7 +199,7 @@ class TestConfidenceFormula:
 
     def test_confidence_formula_max_score(self):
         """BOTH + evidence + discrepancy → 0.6 + 0.2 + 0.2 = 1.0."""
-        from src.core.decision_loop import compute_confidence
+        from tracer_agent.src.core.decision_loop import compute_confidence
 
         state = self._make_state(
             typology="BOTH", verdict="CORROBORATED",
@@ -223,7 +223,7 @@ class TestConfidenceFormula:
         v8.0 listed this test in spec but did NOT implement it.
         Tests the conditional edge path compute_confidence → submit.
         """
-        from src.core.decision_loop import compute_confidence, should_generate_sar
+        from tracer_agent.src.core.decision_loop import compute_confidence, should_generate_sar
 
         state = self._make_state(typology="STRUCTURING", verdict="INSUFFICIENT_DATA")
         result = compute_confidence(state)
@@ -235,7 +235,7 @@ class TestConfidenceFormula:
 
     def test_high_confidence_generates_sar(self):
         """Complement of low confidence: high confidence → should_generate_sar returns "draft"."""
-        from src.core.decision_loop import compute_confidence, should_generate_sar
+        from tracer_agent.src.core.decision_loop import compute_confidence, should_generate_sar
 
         state = self._make_state(typology="BOTH", verdict="CORROBORATED")
         result = compute_confidence(state)
@@ -246,7 +246,7 @@ class TestConfidenceFormula:
 
     def test_evidence_boost_requires_corroboration(self):
         """v9.0 [P5v9-05]: Malformed/empty verdict does NOT trigger evidence boost."""
-        from src.core.decision_loop import compute_confidence
+        from tracer_agent.src.core.decision_loop import compute_confidence
 
         state_empty = self._make_state(typology="STRUCTURING", verdict="")
         result_empty = compute_confidence(state_empty)
@@ -308,7 +308,7 @@ class TestEmptyGraphFail:
 
     def test_empty_graph_raises_on_load(self):
         """v8.0: Empty transactions list raises ValueError at B1 load."""
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         reasoner = GraphReasoner()
         empty_data = {"nodes": {}, "transactions": []}
@@ -322,7 +322,7 @@ class TestNaNRejection:
 
     def test_nan_amount_raises(self):
         """NaN amount must raise ValueError at ingestion."""
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         reasoner = GraphReasoner()
         bad_data = {
@@ -341,7 +341,7 @@ class TestNaNRejection:
 
     def test_infinity_amount_raises(self):
         """Infinity amount must raise ValueError at ingestion."""
-        from src.core.graph_reasoner import GraphReasoner
+        from tracer_agent.src.core.graph_reasoner import GraphReasoner
 
         reasoner = GraphReasoner()
         bad_data = {
@@ -365,7 +365,7 @@ class TestSARValidationHallucination:
 
     def test_validate_sar_catches_entity_in_why(self, structuring_scenario):
         """v9.0: Hallucinated entity in WHY field is caught by full narrative scan."""
-        from src.core.sar_drafter import SARDrafter, SARDraft
+        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
 
         drafter = SARDrafter()
         draft = SARDraft(
@@ -386,7 +386,7 @@ class TestSARValidationHallucination:
 
     def test_validate_sar_catches_entity_in_what(self, structuring_scenario):
         """v9.0: Hallucinated entity in WHAT field is caught."""
-        from src.core.sar_drafter import SARDrafter, SARDraft
+        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
 
         drafter = SARDrafter()
         draft = SARDraft(
@@ -412,7 +412,7 @@ class TestSanitizer:
 
     def test_sanitize_strips_pipe_delimiters(self):
         """v9.0: Pipe-delimited data tags are stripped."""
-        from src.core.sar_drafter import _sanitize_for_prompt
+        from tracer_agent.src.core.sar_drafter import _sanitize_for_prompt
 
         assert "[DATA_TAG_STRIPPED]" in _sanitize_for_prompt("prefix <data> suffix")
         assert "[DATA_TAG_STRIPPED]" in _sanitize_for_prompt("prefix </data> suffix")

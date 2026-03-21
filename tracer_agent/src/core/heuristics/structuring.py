@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from src.config import (
+from tracer_agent.src.config import (
     STRUCTURING_MIN_AMOUNT_USD,
     STRUCTURING_MAX_AMOUNT_USD,
     STRUCTURING_MIN_AMOUNT_INR,

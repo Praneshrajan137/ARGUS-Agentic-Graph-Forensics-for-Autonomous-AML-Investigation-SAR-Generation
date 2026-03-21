@@ -23,11 +23,11 @@ from typing import Any
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 
-from src.config import (
+from tracer_agent.src.config import (
     AGENT_VERSION,
     PROTOBUF_CONTENT_TYPE,
 )
-from src.core.decision_loop import build_workflow, InvestigationState
+from tracer_agent.src.core.decision_loop import build_workflow, InvestigationState
 # Lazy import: protobuf descriptor collision occurs when both root protos/ and
 # tracer_agent/protos/ register the same financial_crime.proto file name.
 # In unified mode the protobuf module is never needed (graph is pre-populated),

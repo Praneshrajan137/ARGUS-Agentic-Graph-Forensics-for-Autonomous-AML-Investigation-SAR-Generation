@@ -102,7 +102,7 @@ print()
 print("Section 4: Configuration Validation")
 
 try:
-    from src.config import (
+    from tracer_agent.src.config import (
         CONFIDENCE_THRESHOLD, SAR_LLM_SEED, SAR_MAX_NARRATIVE_CHARS,
         AGENT_VERSION, STRUCTURING_MIN_AMOUNT_USD, STRUCTURING_MAX_AMOUNT_USD,
         CTR_THRESHOLD_USD, DECAY_RATE_MIN, DECAY_RATE_MAX,
@@ -136,14 +136,14 @@ print()
 print("Section 5: Import Smoke Test")
 
 try:
-    from src.core.a2a_client import A2AClient
-    from src.core.a2a_server import app as a2a_app
-    from src.core.decision_loop import build_workflow
-    from src.core.graph_reasoner import GraphReasoner
-    from src.core.evidence_synthesizer import EvidenceSynthesizer
-    from src.core.sar_drafter import SARDrafter
-    from src.core.heuristics.structuring import detect_structuring
-    from src.core.heuristics.layering import detect_layering
+    from tracer_agent.src.core.a2a_client import A2AClient
+    from tracer_agent.src.core.a2a_server import app as a2a_app
+    from tracer_agent.src.core.decision_loop import build_workflow
+    from tracer_agent.src.core.graph_reasoner import GraphReasoner
+    from tracer_agent.src.core.evidence_synthesizer import EvidenceSynthesizer
+    from tracer_agent.src.core.sar_drafter import SARDrafter
+    from tracer_agent.src.core.heuristics.structuring import detect_structuring
+    from tracer_agent.src.core.heuristics.layering import detect_layering
     check_pass("All 8 core modules import successfully")
 except Exception as e:
     check_fail(f"Import error: {e}")
@@ -216,7 +216,7 @@ else:
     check_fail(f"PYTHONHASHSEED not propagated: {os.environ.get('PYTHONHASHSEED', 'NOT SET')}")
 
 try:
-    from src.config import SAR_LLM_SEED
+    from tracer_agent.src.config import SAR_LLM_SEED
     if SAR_LLM_SEED == 42:
         check_pass("SAR_LLM_SEED = 42")
     else:
@@ -230,10 +230,10 @@ print()
 print("Section 10: Performance Baseline")
 
 t0 = time.monotonic()
-from src.core.decision_loop import build_workflow  # noqa: F811
-from src.core.graph_reasoner import GraphReasoner  # noqa: F811
-from src.core.evidence_synthesizer import EvidenceSynthesizer  # noqa: F811
-from src.core.sar_drafter import SARDrafter  # noqa: F811
+from tracer_agent.src.core.decision_loop import build_workflow  # noqa: F811
+from tracer_agent.src.core.graph_reasoner import GraphReasoner  # noqa: F811
+from tracer_agent.src.core.evidence_synthesizer import EvidenceSynthesizer  # noqa: F811
+from tracer_agent.src.core.sar_drafter import SARDrafter  # noqa: F811
 elapsed = time.monotonic() - t0
 
 if elapsed < 5.0:

@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone, timedelta
 
-from src.config import (
+from tracer_agent.src.config import (
     SAR_LLM_MODEL,
     SAR_LLM_TEMPERATURE,
     SAR_LLM_SEED,

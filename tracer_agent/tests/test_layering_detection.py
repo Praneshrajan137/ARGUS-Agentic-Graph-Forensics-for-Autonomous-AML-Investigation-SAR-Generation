@@ -15,9 +15,9 @@ Tests cover:
 from decimal import Decimal
 
 
-from src.core.graph_reasoner import GraphReasoner
-from src.core.heuristics.layering import detect_layering
-from src.config import MIN_CHAIN_LENGTH
+from tracer_agent.src.core.graph_reasoner import GraphReasoner
+from tracer_agent.src.core.heuristics.layering import detect_layering
+from tracer_agent.src.config import MIN_CHAIN_LENGTH
 
 
 # ===================================================================

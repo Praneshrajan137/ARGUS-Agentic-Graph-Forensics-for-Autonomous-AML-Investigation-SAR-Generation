@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from src.config import (
+from tracer_agent.src.config import (
     RETRY_MAX_ATTEMPTS,
     RETRY_BASE_DELAY_SECONDS,
     JITTER_FACTOR,

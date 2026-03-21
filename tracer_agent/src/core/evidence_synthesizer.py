@@ -34,7 +34,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass, field
 
-from src.config import (
+from tracer_agent.src.config import (
     AMOUNT_PATTERNS,
     IFSC_SEARCH_COMPILED,
     PAN_SEARCH_COMPILED,

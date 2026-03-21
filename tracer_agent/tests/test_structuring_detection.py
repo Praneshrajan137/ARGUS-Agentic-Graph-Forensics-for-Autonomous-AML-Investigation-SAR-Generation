@@ -19,9 +19,9 @@ Tests cover:
 from decimal import Decimal
 
 
-from src.core.graph_reasoner import GraphReasoner
-from src.core.heuristics.structuring import detect_structuring
-from src.config import STRUCTURING_MIN_COUNT
+from tracer_agent.src.core.graph_reasoner import GraphReasoner
+from tracer_agent.src.core.heuristics.structuring import detect_structuring
+from tracer_agent.src.config import STRUCTURING_MIN_COUNT
 
 
 # ===================================================================

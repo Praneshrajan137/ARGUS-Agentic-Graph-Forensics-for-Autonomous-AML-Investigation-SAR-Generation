@@ -24,8 +24,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.core.graph_reasoner import GraphReasoner
-from src.config import MAX_PATHS_PER_SEARCH
+from tracer_agent.src.core.graph_reasoner import GraphReasoner
+from tracer_agent.src.config import MAX_PATHS_PER_SEARCH
 
 
 # ===================================================================

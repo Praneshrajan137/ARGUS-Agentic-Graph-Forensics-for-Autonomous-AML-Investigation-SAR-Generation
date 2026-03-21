@@ -6,7 +6,7 @@ import json
 import pytest
 from pathlib import Path
 
-from src.ralph_runner import (
+from tracer_agent.src.ralph_runner import (
     load_prd,
     save_prd,
     get_next_task,

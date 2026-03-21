@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.core.a2a_server import app, _get_workflow
+from tracer_agent.src.core.a2a_server import app, _get_workflow
 from protos import financial_crime_pb2 as pb2
-from src.config import AGENT_VERSION, PROTOBUF_CONTENT_TYPE
+from tracer_agent.src.config import AGENT_VERSION, PROTOBUF_CONTENT_TYPE
 
 
 @pytest.fixture(autouse=True)

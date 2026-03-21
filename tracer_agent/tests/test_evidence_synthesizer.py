@@ -18,8 +18,8 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 
-from src.core.evidence_synthesizer import EvidenceSynthesizer
-from src.config import (
+from tracer_agent.src.core.evidence_synthesizer import EvidenceSynthesizer
+from tracer_agent.src.config import (
     IFSC_COMPILED,
     PAN_COMPILED,
     SWIFT_COMPILED,

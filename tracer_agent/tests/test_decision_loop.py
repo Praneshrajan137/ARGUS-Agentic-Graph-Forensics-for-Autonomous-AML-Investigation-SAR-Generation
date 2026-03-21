@@ -5,7 +5,7 @@ Updated for v9.0 API (uppercase statuses, renamed functions/fields).
 """
 from typing import Any
 
-from src.core.decision_loop import (
+from tracer_agent.src.core.decision_loop import (
     InvestigationState,
     receive_case,
     detect_typology,
