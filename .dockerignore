@@ -14,9 +14,6 @@
 # Virtual environment (installed fresh from requirements.txt in Docker)
 .venv
 
-# Tracer agent (separate container, separate Dockerfile)
-tracer_agent/
-
 # Test & coverage artifacts (not needed at runtime)
 tests/
 .pytest_cache/
