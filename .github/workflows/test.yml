@@ -109,7 +109,8 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=0 \
             -v
-
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tracer_agent
   # ════════════════════════════════════════════════════════════════
   # DOCKER BUILD — Both Agents
   # ════════════════════════════════════════════════════════════════
