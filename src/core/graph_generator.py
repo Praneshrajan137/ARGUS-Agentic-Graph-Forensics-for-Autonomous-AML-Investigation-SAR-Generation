@@ -18,8 +18,9 @@ import networkx as nx
 from typing import Optional, List, Union
 from decimal import Decimal
 import random
-import pickle
+import json
 import logging
+import warnings
 from pathlib import Path
 from datetime import datetime, timedelta
 from faker import Faker
@@ -380,31 +381,46 @@ def _add_transaction_attributes_random(
 
 def save_graph(graph: nx.DiGraph, filepath: Union[str, 'Path']) -> None:
     """
-    Save graph to pickle file.
-    
+    Save graph to JSON file (node-link format).
+
     Args:
         graph: NetworkX graph to save
-        filepath: Output file path
+        filepath: Output file path (.json extension recommended)
     """
     logger.info(f"Saving graph to {filepath}")
-    with open(filepath, 'wb') as f:
-        pickle.dump(graph, f)
+    data = nx.node_link_data(graph)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, default=str, ensure_ascii=False)
     logger.info(f"Graph saved successfully ({graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges)")
 
 
 def load_graph(filepath: Union[str, 'Path']) -> nx.DiGraph:
     """
-    Load graph from pickle file.
-    
+    Load graph from JSON file (node-link format).
+    Falls back to pickle for legacy .pkl files with a security warning.
+
     Args:
         filepath: Input file path
-        
+
     Returns:
         Loaded NetworkX graph
     """
+    filepath = Path(filepath)
     logger.info(f"Loading graph from {filepath}")
-    with open(filepath, 'rb') as f:
-        graph = pickle.load(f)
+    if filepath.suffix == '.pkl':
+        warnings.warn(
+            f"Loading pickle file '{filepath}' — pickle deserialization can execute "
+            "arbitrary code. Only load .pkl files you generated yourself. "
+            "Migrate to JSON with save_graph().",
+            stacklevel=2,
+        )
+        import pickle  # noqa: S403 — legacy fallback only
+        with open(filepath, 'rb') as f:
+            graph = pickle.load(f)  # noqa: S301
+    else:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        graph = nx.node_link_graph(data)
     logger.info(f"Graph loaded successfully ({graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges)")
     return graph
 

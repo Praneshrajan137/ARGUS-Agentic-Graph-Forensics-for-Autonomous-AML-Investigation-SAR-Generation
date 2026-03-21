@@ -3,6 +3,7 @@
 Single FastAPI server on port 8000 with 17+ REST endpoints under /api/*.
 Lifespan hook generates the graph on startup with PYTHONHASHSEED=0.
 """
+import collections
 import json
 import logging
 import os
@@ -126,14 +127,66 @@ app = FastAPI(
 )
 
 # ── CORS middleware ──
+_DEFAULT_ORIGINS = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+_CORS_ORIGINS = os.getenv("ARGUS_CORS_ORIGINS", "").split(",") if os.getenv("ARGUS_CORS_ORIGINS") else _DEFAULT_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-ARGUS-Epoch"],
     expose_headers=["X-ARGUS-Epoch"],
 )
+
+
+# ── API key authentication middleware ──
+_ARGUS_API_KEY = os.getenv("ARGUS_API_KEY")  # None = auth disabled (dev mode)
+_PUBLIC_PATHS = {"/api/health", "/api/agent/agent.json", "/docs", "/openapi.json", "/redoc"}
+
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):
+    if _ARGUS_API_KEY is None:
+        return await call_next(request)
+    path = request.url.path
+    if path in _PUBLIC_PATHS or not path.startswith("/api/"):
+        return await call_next(request)
+    provided = request.headers.get("X-API-Key") or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if not provided or provided != _ARGUS_API_KEY:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
+
+
+# ── Rate limiting middleware (sliding window, per-IP) ──
+_RATE_LIMIT_RPM = int(os.getenv("ARGUS_RATE_LIMIT_RPM", "60"))  # requests per minute
+_rate_windows: dict[str, collections.deque] = {}
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    window = _rate_windows.setdefault(client_ip, collections.deque())
+    # Evict entries older than 60s
+    while window and window[0] < now - 60:
+        window.popleft()
+    if len(window) >= _RATE_LIMIT_RPM:
+        return JSONResponse({"error": "rate limit exceeded"}, status_code=429)
+    window.append(now)
+    return await call_next(request)
+
+
+# ── Security headers middleware ──
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 
 # ── Epoch middleware — sends generation epoch on every response ──

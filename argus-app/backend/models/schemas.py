@@ -166,10 +166,10 @@ class EvidenceListResponse(BaseModel):
 # ═══ INVESTIGATION ═══
 
 class InvestigationRequest(BaseModel):
-    subject_id: str
+    subject_id: str = Field(..., min_length=1, max_length=64, pattern=r"^\w+$")
     hop_depth: int = Field(default=3, ge=1, le=10)
     jurisdiction: str = Field(default="fincen", pattern="^(fincen|fiu_ind)$")
-    case_id: str | None = None  # auto-generated if None
+    case_id: str | None = Field(default=None, max_length=128, pattern=r"^[\w\-]+$")
 
 class PipelineStep(BaseModel):
     model_config = ConfigDict(from_attributes=True)

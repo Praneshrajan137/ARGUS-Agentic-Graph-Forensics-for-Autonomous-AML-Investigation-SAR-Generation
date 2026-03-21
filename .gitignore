@@ -52,6 +52,11 @@ results/
 *.pkl
 *.log
 
+# Secrets — NEVER commit .env files with real credentials
+.env
+*.env
+!*.env.example
+
 # Cursor
 .cursor/
 
