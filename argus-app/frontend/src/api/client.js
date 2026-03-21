@@ -78,7 +78,7 @@ export const generateWorld = (params) =>
 // ═══ GRAPH ═══
 export const getGraphStats = () => request('/graph/stats');
 
-export const getGraphVisualization = (limit = 500) =>
+export const getGraphVisualization = (limit = 5000) =>
   request(`/graph/visualization?limit=${limit}`);
 
 export const getNodes = ({ page = 1, per_page = 50, type, search } = {}) => {

@@ -11,7 +11,7 @@ export default function GraphExplorer() {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const graphRef = useRef(null);
   const { data: graphData, loading, error, refetch } = useQuery(
-    'graph-viz', () => getGraphVisualization(500)
+    'graph-viz', () => getGraphVisualization(5000)
   );
 
   const handleNodeSelect = useCallback((nodeId) => {

@@ -31,7 +31,7 @@ JSON_CONTENT_TYPE = "application/json"
 # ═══════════════════════════════════════════════════════════════════
 # GRAPH GENERATION
 # ═══════════════════════════════════════════════════════════════════
-DEFAULT_GRAPH_SIZE = int(os.getenv("GRAPH_SIZE", "1000"))
+DEFAULT_GRAPH_SIZE = int(os.getenv("GRAPH_SIZE", "5000"))
 DEFAULT_DIFFICULTY = int(os.getenv("DIFFICULTY", "5"))
 DEFAULT_SEED = int(os.getenv("SEED", "42"))
 GENERATE_EVIDENCE = os.getenv("GENERATE_EVIDENCE", "true").lower() == "true"

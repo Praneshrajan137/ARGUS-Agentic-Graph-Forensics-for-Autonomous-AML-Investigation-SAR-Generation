@@ -25,7 +25,7 @@ async def graph_stats():
 
 
 @router.get("/visualization", response_model=GraphVisualizationResponse)
-async def graph_visualization(limit: int = Query(default=500, ge=1, le=5000)):
+async def graph_visualization(limit: int = Query(default=5000, ge=1, le=10000)):
     """Return nodes and edges for D3 force-directed graph visualization."""
     state = get_state()
     if state.graph is None:
