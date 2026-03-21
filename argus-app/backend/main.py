@@ -27,6 +27,14 @@ from .config import API_PORT, API_HOST, UNIFIED_VERSION
 from .services.forge_service import generate_world
 from .models.state import get_state
 
+# Use tracer_agent's RedactingFormatter for credential-safe logging
+from tracer_agent.src.main import RedactingFormatter, configure_logging as _configure_tracer_logging
+
+# Configure root logger with RedactingFormatter (redacts API keys, tokens, passwords)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(RedactingFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
+
 logger = logging.getLogger("argus.backend")
 
 
@@ -60,7 +68,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan: generate graph on startup, cleanup on shutdown."""
     seed = int(os.getenv("SEED", "42"))
     difficulty = int(os.getenv("DIFFICULTY", "5"))
-    graph_size = int(os.getenv("GRAPH_SIZE", "1000"))
+    graph_size = int(os.getenv("GRAPH_SIZE", "5000"))
 
     logger.info(
         "ARGUS backend starting — seed=%d, difficulty=%d, graph_size=%d",
@@ -127,6 +135,7 @@ from .routes.investigation import router as investigation_router
 from .routes.evidence import router as evidence_router
 from .routes.assessment import router as assessment_router
 from .routes.benchmark import router as benchmark_router
+from .routes.agent import router as agent_router
 
 app.include_router(health_router)
 app.include_router(graph_router)
@@ -134,6 +143,7 @@ app.include_router(investigation_router)
 app.include_router(evidence_router)
 app.include_router(assessment_router)
 app.include_router(benchmark_router)
+app.include_router(agent_router)
 
 # ── Production mode: serve frontend static files ──
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"

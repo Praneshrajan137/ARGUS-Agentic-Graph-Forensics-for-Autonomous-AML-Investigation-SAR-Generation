@@ -8,6 +8,7 @@ from ..models.schemas import (
     InvestigationListResponse, PipelineStatusResponse,
 )
 from ..services.investigation_service import run_investigation
+from ..services.baseline_service import run_baseline_investigation
 
 router = APIRouter(prefix="/api/investigation", tags=["investigation"])
 
@@ -89,3 +90,27 @@ async def get_investigation_progress(case_id: str):
         steps=steps,
         progress_pct=progress_pct,
     )
+
+
+@router.post("/baseline")
+async def baseline_investigation(request: InvestigationRequest):
+    """Run a baseline (naive heuristic) investigation for comparison against Tracer."""
+    state = get_state()
+    if state.graph is None:
+        raise HTTPException(status_code=400, detail="No graph loaded. Generate first.")
+
+    # Resolve subject node
+    subject_id = request.subject_id
+    resolved = None
+    for candidate in [subject_id, int(subject_id) if subject_id.isdigit() else None]:
+        if candidate is not None and candidate in state.graph:
+            resolved = candidate
+            break
+    if resolved is None:
+        raise HTTPException(status_code=404, detail=f"Subject not found: {subject_id}")
+
+    result = run_baseline_investigation(
+        subject_id=str(resolved),
+        hop_depth=request.hop_depth,
+    )
+    return result

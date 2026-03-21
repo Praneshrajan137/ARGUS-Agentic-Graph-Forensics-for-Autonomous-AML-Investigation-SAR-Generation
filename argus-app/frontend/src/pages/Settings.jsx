@@ -13,7 +13,7 @@ import PageHeader from '@/components/shared/PageHeader';
 import GlowCard from '@/components/shared/GlowCard';
 import ErrorCard from '@/components/shared/ErrorCard';
 import { useQuery, invalidateQueries } from '@/hooks/useQuery';
-import { getConfig, getHealth, generateWorld, resetState } from '@/api/client';
+import { getConfig, getHealth, generateWorld, resetState, getAgentConfig, getAgentCard } from '@/api/client';
 import { useToast } from '@/contexts/ToastContext';
 
 const stagger = {
@@ -47,6 +47,8 @@ export default function Settings() {
   const { addToast } = useToast();
   const { data: config } = useQuery('config', getConfig);
   const { data: health } = useQuery('health-settings', getHealth);
+  const { data: agentConfig } = useQuery('agent-config', getAgentConfig);
+  const { data: agentCard } = useQuery('agent-card', getAgentCard);
 
   // Generate form state
   const [seed, setSeed] = useState(42);
@@ -318,6 +320,51 @@ export default function Settings() {
             </div>
           </GlowCard>
         </motion.div>
+
+        {/* ═══ PURPLE AGENT CONFIG ═══ */}
+        {agentConfig && (
+          <motion.div variants={fadeUp}>
+            <GlowCard className="p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Zap className="w-5 h-5 text-accent" />
+                <h2 className="font-display text-xl text-text-0">
+                  Purple Agent Configuration
+                </h2>
+                {agentCard && (
+                  <span className="ml-auto text-xs font-mono text-text-3">
+                    {agentCard.name} v{agentConfig.AGENT_VERSION || '7.0.0'}
+                  </span>
+                )}
+              </div>
+
+              {agentCard && (
+                <div className="mb-4 p-3 bg-surface-1 rounded-lg">
+                  <p className="text-sm text-text-1">{agentCard.description}</p>
+                  <div className="flex gap-4 mt-2 text-xs text-text-3">
+                    <span>Mode: {agentCard.communication?.mode || 'unified'}</span>
+                    <span>Protocol: {agentCard.communication?.protocol || 'A2A'}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                {Object.entries(agentConfig)
+                  .filter(([k]) => !k.startsWith('_'))
+                  .map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between py-2 px-3 bg-surface-1 rounded-lg text-xs"
+                    >
+                      <span className="text-text-2 font-mono truncate mr-2">{key}</span>
+                      <span className="font-mono font-bold text-text-0 truncate max-w-[50%] text-right">
+                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </GlowCard>
+          </motion.div>
+        )}
 
         {/* ═══ DANGER ZONE ═══ */}
         <motion.div variants={fadeUp}>

@@ -9,3 +9,9 @@ python-multipart==0.0.20
 spacy==3.8.4
 httpx==0.28.1
 protobuf>=6.30.0
+
+# Purple Agent (LangGraph workflow, SAR drafting, evidence synthesis)
+langgraph==0.2.60
+langchain-core==0.3.30
+openai==1.59.9
+tzdata==2025.2

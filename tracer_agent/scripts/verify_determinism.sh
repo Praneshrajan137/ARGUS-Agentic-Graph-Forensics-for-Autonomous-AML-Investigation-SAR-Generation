@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-# Purple Agent — Determinism Verification Script
+# Tracer Agent — Determinism Verification Script
 # Architecture §10: "byte-identical results across 10 consecutive runs"
 #
 # TWO verification levels:
@@ -12,11 +12,11 @@ set -uo pipefail
 # NOTE: NO set -e (Rule 26) — we handle exit codes explicitly
 
 NUM_RUNS="${1:-10}"
-OUTPUT_DIR="/tmp/purple_determinism_$$"
+OUTPUT_DIR="/tmp/tracer_determinism_$$"
 FAILED=0
 
 echo "═══════════════════════════════════════════════════════════"
-echo "Purple Agent — Determinism Verification"
+echo "Tracer Agent — Determinism Verification"
 echo "Runs: $NUM_RUNS | PID: $$ | Output: $OUTPUT_DIR"
 echo "═══════════════════════════════════════════════════════════"
 

@@ -14,8 +14,8 @@
 # Virtual environment (installed fresh from requirements.txt in Docker)
 .venv
 
-# Purple agent (separate container, separate Dockerfile)
-purple_agent/
+# Tracer agent (separate container, separate Dockerfile)
+tracer_agent/
 
 # Test & coverage artifacts (not needed at runtime)
 tests/

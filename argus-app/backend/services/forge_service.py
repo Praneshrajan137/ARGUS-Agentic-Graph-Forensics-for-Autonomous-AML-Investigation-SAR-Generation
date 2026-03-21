@@ -150,7 +150,8 @@ def get_graph_stats() -> dict[str, Any]:
             "metadata": {
                 k: str(v) if isinstance(v, Decimal) else v
                 for k, v in crime.get("metadata", {}).items()
-                if k in ("mule_id", "total_amount", "source_node", "dest_node", "chain_length")
+                if k in ("mule_id", "total_amount", "source_node", "dest_node",
+                         "chain_length", "initial_amount", "final_amount", "total_decay")
             },
         })
 

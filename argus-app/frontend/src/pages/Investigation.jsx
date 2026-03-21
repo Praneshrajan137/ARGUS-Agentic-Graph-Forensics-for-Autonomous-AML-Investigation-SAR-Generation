@@ -248,6 +248,53 @@ export default function Investigation() {
           </motion.div>
         )}
 
+        {/* SAR Mode & Validation Details */}
+        {result && result.sar_mode && result.sar_mode !== 'none' && (
+          <motion.div variants={fadeUp}>
+            <GlowCard className="p-6">
+              <h3 className="text-sm font-semibold text-text-0 mb-4 uppercase tracking-wider">
+                SAR Generation Details
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-3 bg-surface-1 rounded-lg">
+                  <span className="text-xs text-text-3 block mb-1">SAR Mode</span>
+                  <span className={`font-mono text-sm font-bold ${
+                    result.sar_mode === 'llm' ? 'text-emerald-400' : 'text-amber-400'
+                  }`}>
+                    {result.sar_mode === 'llm' ? 'LLM (GPT-4.1)' : 'Mechanical Template'}
+                  </span>
+                </div>
+                <div className="p-3 bg-surface-1 rounded-lg">
+                  <span className="text-xs text-text-3 block mb-1">Retry Count</span>
+                  <span className="font-mono text-sm font-bold text-text-0">
+                    {result.retry_count || 0}
+                  </span>
+                </div>
+                <div className="p-3 bg-surface-1 rounded-lg">
+                  <span className="text-xs text-text-3 block mb-1">Confidence</span>
+                  <span className="font-mono text-sm font-bold text-text-0">
+                    {((result.confidence_score || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              {result.validation_errors && result.validation_errors.length > 0 && (
+                <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/20 rounded-lg border border-rose-200 dark:border-rose-800">
+                  <span className="text-xs font-semibold text-rose-600 dark:text-rose-400 block mb-2">
+                    Validation Issues ({result.validation_errors.length})
+                  </span>
+                  <ul className="space-y-1">
+                    {result.validation_errors.map((err, i) => (
+                      <li key={i} className="text-xs font-mono text-rose-700 dark:text-rose-300">
+                        {typeof err === 'string' ? err : err.message || JSON.stringify(err)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </GlowCard>
+          </motion.div>
+        )}
+
         {/* Results: visible after completion */}
         {result && result.status !== 'IN_PROGRESS' && result.status !== 'FAILED' && (
           <motion.div variants={fadeUp}>

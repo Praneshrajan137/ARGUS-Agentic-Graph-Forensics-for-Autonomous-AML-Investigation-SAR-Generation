@@ -1,7 +1,13 @@
-"""Investigation pipeline — 8-step state machine matching Architecture S3.
+"""Investigation pipeline — real LangGraph 8-node state machine from tracer_agent.
 
-v5.0 D-47: Complete implementation (v4.0 had skeleton comments only).
-v6.0: No functional changes. Bridge logic and pipeline are production-verified.
+v8.0: Replaced manual 320-line pipeline with the real LangGraph workflow from
+tracer_agent/src/core/decision_loop.py. The argus-app backend now acts as a
+facade that pre-populates the graph_fragment from in-memory Forge data, invokes
+the authentic Tracer workflow, and translates results for the frontend API.
+
+The bridge function _networkx_to_reasoner_dict() is preserved for Forge→Tracer
+schema mapping (field name remapping, entity_type normalization, timestamp
+conversion, BFS reachability).
 """
 import hashlib
 import logging
@@ -16,6 +22,7 @@ import networkx as nx
 
 from ..models.state import get_state
 from .tracer_service import (
+    build_workflow, InvestigationState,
     GraphReasoner, detect_structuring, detect_layering,
     EvidenceSynthesizer, SARDraft, mechanical_sar_template,
 )
@@ -34,6 +41,7 @@ def _networkx_to_reasoner_dict(
     """Convert FORGE NetworkX graph to TRACER GraphReasoner dict format.
 
     v5.0: entity_type remapping (D-48), self-loop documentation (D-54).
+    v8.0: Includes text_evidence from AppState for evidence synthesis.
     Field name mapping: see APPENDIX C in build plan.
     """
     from datetime import datetime as dt_cls
@@ -117,203 +125,248 @@ def _networkx_to_reasoner_dict(
     return {"transactions": transactions, "nodes": nodes}
 
 
+def _inject_text_evidence(graph_dict: dict, subject_id: str) -> dict:
+    """Inject text evidence from AppState into the graph fragment.
+
+    The LangGraph synthesize_evidence node reads text_evidence from
+    graph_fragment. This bridge injects evidence documents so the
+    real Tracer evidence synthesis pipeline can process them.
+    """
+    state = get_state()
+    text_evidence = []
+    for doc in state.evidence_documents:
+        doc_subject = str(doc.get("subject_id", ""))
+        # Include evidence related to the subject or untagged evidence
+        if doc_subject == str(subject_id) or not doc_subject:
+            text_evidence.append({
+                "id": doc.get("id", f"ev-{uuid.uuid4().hex[:8]}"),
+                "source_type": doc.get("type", "document"),
+                "content": doc.get("body", doc.get("narrative", doc.get("content", ""))),
+                "associated_entity": str(doc.get("subject_id", "")),
+                "timestamp": int(doc.get("timestamp", 0)) if doc.get("timestamp") else 0,
+            })
+    graph_dict["text_evidence"] = text_evidence
+    return graph_dict
+
+
+def _langgraph_state_to_response(
+    result_state: dict,
+    case_id: str,
+    subject_id: str,
+    jurisdiction: str,
+) -> dict[str, Any]:
+    """Translate LangGraph InvestigationState → frontend API response format.
+
+    Maps the LangGraph state fields to the response dict the frontend expects,
+    including reconstructed pipeline steps for the PipelineTracker component.
+    """
+    typology = result_state.get("detected_typology", "NONE")
+    involved = sorted(result_state.get("involved_entities", []))
+    confidence = result_state.get("confidence_score", 0.0)
+    sar_narrative = result_state.get("sar_narrative", "") or ""
+    sar_draft = result_state.get("sar_draft")
+    evidence_package = result_state.get("evidence_package") or {}
+    detection_results = result_state.get("detection_results") or {}
+    validation_result = result_state.get("validation_result") or {}
+    retry_count = result_state.get("retry_count", 0)
+    status = result_state.get("status", "FAILED")
+    error_message = result_state.get("error_message")
+
+    # Reconstruct validation_errors from validation_result
+    validation_errors = validation_result.get("errors", []) if not validation_result.get("passed", True) else []
+
+    # Compute idempotency key (same formula as tracer_agent submit_result)
+    idem_input = f"{case_id}{typology}{''.join(sorted(involved))}"
+    idempotency_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
+
+    # Reconstruct pipeline steps for the frontend PipelineTracker
+    steps = _reconstruct_steps(result_state)
+
+    # Determine SAR mode (LLM vs Mechanical)
+    sar_mode = "none"
+    if sar_draft:
+        # If the narrative contains XML-like Five Ws tags without FinCEN/FIU header, it's mechanical
+        if sar_narrative.startswith("<WHO>") or sar_narrative.startswith("═══"):
+            sar_mode = "mechanical"
+        else:
+            sar_mode = "llm"
+
+    return {
+        "case_id": case_id,
+        "subject_id": subject_id,
+        "jurisdiction": jurisdiction,
+        "status": status,
+        "detected_typology": typology,
+        "involved_entities": involved,
+        "confidence_score": confidence,
+        "sar_narrative": sar_narrative,
+        "sar_draft": sar_draft,
+        "sar_mode": sar_mode,
+        "evidence_package": evidence_package,
+        "detection_results": detection_results,
+        "validation_errors": validation_errors,
+        "validation_result": validation_result,
+        "retry_count": retry_count,
+        "idempotency_key": idempotency_key,
+        "investigation_timestamp": result_state.get("investigation_timestamp", int(time.time())),
+        "investigation_start": datetime.now().isoformat(),
+        "steps": steps,
+        "error": error_message,
+    }
+
+
+def _reconstruct_steps(result_state: dict) -> list[dict]:
+    """Reconstruct pipeline steps from LangGraph result state.
+
+    The LangGraph workflow doesn't track per-step timing, so we infer
+    step statuses from the final state. This provides the frontend
+    PipelineTracker with the data it needs.
+    """
+    status = result_state.get("status", "FAILED")
+    typology = result_state.get("detected_typology", "NONE")
+    confidence = result_state.get("confidence_score", 0.0)
+    validation = result_state.get("validation_result") or {}
+    evidence = result_state.get("evidence_package") or {}
+    sar_draft = result_state.get("sar_draft")
+    graph = result_state.get("graph_fragment") or {}
+    error = result_state.get("error_message")
+
+    node_count = len(graph.get("nodes", {}))
+    edge_count = len(graph.get("transactions", []))
+
+    steps = [
+        {"name": "receive", "status": "complete", "duration_ms": 0,
+         "detail": f"Case {result_state.get('case_id', '')} created"},
+    ]
+
+    # Analyze step
+    if status == "FAILED" and error and "graph" in error.lower():
+        steps.append({"name": "analyze", "status": "failed", "duration_ms": 0, "detail": error})
+        return steps
+    steps.append({"name": "analyze", "status": "complete", "duration_ms": 0,
+                   "detail": f"{node_count} nodes, {edge_count} edges"})
+
+    # Detect step
+    if status == "FAILED" and error and "detection" in error.lower():
+        steps.append({"name": "detect", "status": "failed", "duration_ms": 0, "detail": error})
+        return steps
+    detection = result_state.get("detection_results") or {}
+    s_count = len(detection.get("structuring_hits", []))
+    l_count = len(detection.get("layering_hits", []))
+    steps.append({"name": "detect", "status": "complete", "duration_ms": 0,
+                   "detail": f"{typology} ({s_count}S, {l_count}L)"})
+
+    # Synthesize step
+    steps.append({"name": "synthesize", "status": "complete", "duration_ms": 0,
+                   "detail": evidence.get("verdict", "NOT_APPLICABLE")})
+
+    # Compute step
+    gate = "PASS" if confidence >= 0.5 else "FAIL"
+    steps.append({"name": "compute", "status": "complete", "duration_ms": 0,
+                   "detail": f"confidence={confidence:.2f}, gate={gate}"})
+
+    # Draft step
+    if typology != "NONE" and confidence >= 0.5:
+        sar_len = len(result_state.get("sar_narrative", "") or "")
+        retry_count = result_state.get("retry_count", 0)
+        detail = f"{sar_len} chars"
+        if retry_count > 0:
+            detail += f" (retries={retry_count})"
+        steps.append({"name": "draft", "status": "complete", "duration_ms": 0, "detail": detail})
+
+        # Validate step
+        val_status = "complete" if validation.get("passed", True) else "warning"
+        val_errors = validation.get("errors", [])
+        steps.append({"name": "validate", "status": val_status, "duration_ms": 0,
+                       "detail": f"{len(val_errors)} issues" if val_errors else "passed"})
+    else:
+        steps.append({"name": "draft", "status": "complete", "duration_ms": 0, "detail": "skipped"})
+        steps.append({"name": "validate", "status": "complete", "duration_ms": 0, "detail": "skipped"})
+
+    # Submit step
+    idem_key = result_state.get("idempotency_key", "")
+    if not idem_key:
+        involved = sorted(result_state.get("involved_entities", []))
+        idem_input = f"{result_state.get('case_id', '')}{typology}{''.join(involved)}"
+        idem_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
+    steps.append({"name": "submit", "status": "complete", "duration_ms": 0,
+                   "detail": f"idem_key={idem_key[:16]}..."})
+
+    return steps
+
+
 def run_investigation(
     case_id: str,
     subject_id: str,
     hop_depth: int = 3,
     jurisdiction: str = "fincen",
 ) -> dict[str, Any]:
-    """Run the full 8-step investigation pipeline.
+    """Run the full 8-step investigation using the real LangGraph workflow.
 
-    Returns a result dict stored in AppState.investigations[case_id].
+    This function:
+    1. Converts in-memory Forge graph → TRACER dict format (BFS reachability)
+    2. Injects text evidence from AppState
+    3. Pre-populates graph_fragment in LangGraph state (unified mode)
+    4. Invokes the real 8-node LangGraph decision loop
+    5. Translates result → frontend API response format
     """
     state = get_state()
     if state.graph is None:
-        return {"case_id": case_id, "status": "FAILED", "error": "No graph loaded"}
+        return {"case_id": case_id, "status": "FAILED", "error": "No graph loaded", "steps": []}
 
-    steps: list[dict] = []
-    result: dict[str, Any] = {
+    # Step 1: Convert Forge graph → TRACER dict format
+    graph_dict = _networkx_to_reasoner_dict(state.graph, subject_id, hop_depth)
+
+    if not graph_dict.get("transactions"):
+        return {
+            "case_id": case_id,
+            "subject_id": subject_id,
+            "status": "FAILED",
+            "error": f"Subject {subject_id} not found or no transactions within {hop_depth} hops",
+            "steps": [{"name": "analyze", "status": "failed", "duration_ms": 0,
+                        "detail": f"Subject {subject_id} not reachable"}],
+        }
+
+    # Step 2: Inject text evidence from AppState
+    graph_dict = _inject_text_evidence(graph_dict, subject_id)
+
+    # Step 3: Build initial LangGraph state with pre-populated graph_fragment
+    initial_state: InvestigationState = {
         "case_id": case_id,
-        "subject_id": subject_id,
+        "subject_id": str(subject_id),
         "jurisdiction": jurisdiction,
-        "status": "IN_PROGRESS",
-        "steps": steps,
+        "hop_depth": hop_depth,
+        "graph_fragment": graph_dict,
+        "detected_typology": None,
+        "detection_results": None,
+        "evidence_package": None,
+        "sar_narrative": None,
+        "sar_draft": None,
+        "validation_result": None,
+        "involved_entities": [],
+        "confidence_score": 0.0,
+        "investigation_start_timestamp": 0,
+        "investigation_timestamp": 0,
+        "status": "PENDING",
+        "retry_count": 0,
+        "error_message": None,
     }
 
-    # ── Step 1: RECEIVE ──
-    t0 = time.time()
-    result["investigation_start"] = datetime.now().isoformat()
-    steps.append({"name": "receive", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"Case {case_id} created"})
-
-    # ── Step 2: ANALYZE ──
-    t0 = time.time()
+    # Step 4: Run the real LangGraph 8-node workflow
     try:
-        graph_dict = _networkx_to_reasoner_dict(state.graph, subject_id, hop_depth)
-        reasoner = GraphReasoner()
-        reasoner.load_from_dict(graph_dict)
-        steps.append({"name": "analyze", "status": "complete",
-                       "duration_ms": int((time.time() - t0) * 1000),
-                       "detail": f"{reasoner.get_node_count()} nodes, {reasoner.get_edge_count()} edges"})
+        workflow = build_workflow()
+        result_state = workflow.invoke(initial_state)
     except Exception as e:
-        steps.append({"name": "analyze", "status": "failed",
-                       "duration_ms": int((time.time() - t0) * 1000),
-                       "detail": str(e)})
-        result["status"] = "FAILED"
-        result["error"] = f"Graph analysis failed: {e}"
-        state.investigations[case_id] = result
-        return result
+        logger.error("LangGraph workflow failed for case %s: %s", case_id, e, exc_info=True)
+        result_state = {
+            **initial_state,
+            "status": "FAILED",
+            "error_message": f"LangGraph workflow failed: {e}",
+        }
 
-    # ── Step 3: DETECT ──
-    t0 = time.time()
-    currency = "INR" if jurisdiction == "fiu_ind" else "USD"
-    structuring_hits: list[dict] = []
-    layering_hits: list[dict] = []
-    all_criminal_nodes: set[str] = set()
+    # Step 5: Translate → frontend API response format
+    result = _langgraph_state_to_response(result_state, case_id, str(subject_id), jurisdiction)
 
-    for node_id in reasoner.get_all_node_ids():
-        s_result = detect_structuring(reasoner, node_id, currency=currency)
-        if s_result.detected:
-            structuring_hits.append({
-                "node": node_id, "mode": s_result.mode,
-                "sources": s_result.counterpart_nodes,
-                "tx_count": s_result.transaction_count,
-                "total": str(s_result.total_amount), "currency": s_result.currency,
-                "transactions": [tx["tx_id"] for tx in s_result.qualifying_transactions],
-            })
-            all_criminal_nodes.add(node_id)
-            all_criminal_nodes.update(s_result.counterpart_nodes)
-
-        l_result = detect_layering(reasoner, node_id, max_depth=hop_depth, currency=currency)
-        if l_result.detected:
-            for chain in l_result.chains:
-                layering_hits.append({
-                    "start_node": node_id, "chain_nodes": chain.chain_nodes,
-                    "hop_count": chain.hop_count, "avg_decay": str(chain.avg_decay_rate),
-                    "currency": chain.currency,
-                    "transactions": [tx["tx_id"] for tx in chain.chain_transactions],
-                })
-                all_criminal_nodes.update(chain.chain_nodes)
-
-    has_s = len(structuring_hits) > 0
-    has_l = len(layering_hits) > 0
-    typology = "BOTH" if has_s and has_l else ("STRUCTURING" if has_s else ("LAYERING" if has_l else "NONE"))
-    involved = sorted(all_criminal_nodes)
-    detection_results = {"typology": typology, "structuring_hits": structuring_hits, "layering_hits": layering_hits}
-
-    steps.append({"name": "detect", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"{typology} ({len(structuring_hits)}S, {len(layering_hits)}L)"})
-
-    # ── Step 4: SYNTHESIZE ──
-    t0 = time.time()
-    evidence_package = {"verdict": "NOT_APPLICABLE", "discrepancies": []}
-    if typology != "NONE" and state.evidence_documents:
-        try:
-            synthesizer = EvidenceSynthesizer()
-            text_evidence = [
-                {"content": doc.get("body", doc.get("narrative", "")), **doc}
-                for doc in state.evidence_documents
-                if str(doc.get("subject_id", "")) == str(subject_id) or not doc.get("subject_id")
-            ]
-            total_inflow = Decimal("0")
-            for tx in graph_dict.get("transactions", []):
-                if tx["target_node"] == str(subject_id):
-                    total_inflow += tx["amount"]
-            ledger_data = {"total_inflow": total_inflow, "entity_id": str(subject_id),
-                           "transactions": graph_dict.get("transactions", [])}
-            ev_result = synthesizer.synthesize(ledger_data, text_evidence, currency=currency)
-            evidence_package = {"verdict": ev_result.verdict, "reasoning": ev_result.reasoning,
-                                "discrepancies": ev_result.discrepancies,
-                                "amounts": [str(a) for a in ev_result.extracted_amounts]}
-        except Exception as e:
-            logger.warning("Evidence synthesis failed: %s", e)
-            evidence_package = {"verdict": "INSUFFICIENT_DATA", "discrepancies": []}
-
-    steps.append({"name": "synthesize", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": evidence_package["verdict"]})
-
-    # ── Step 5: COMPUTE CONFIDENCE ──
-    t0 = time.time()
-    CORROBORATING = frozenset({"CORROBORATED", "SUSPICIOUS_DISCREPANCY", "CONFIRMED", "PARTIAL_MATCH"})
-    if typology == "NONE":
-        confidence = 0.0
-    else:
-        base = 0.6 if typology == "BOTH" else 0.3
-        evidence_boost = 0.2 if evidence_package.get("verdict", "") in CORROBORATING else 0.0
-        discrepancy_boost = 0.2 if len(evidence_package.get("discrepancies", [])) > 0 else 0.0
-        confidence = min(1.0, base + evidence_boost + discrepancy_boost)
-
-    if confidence < 0.5:
-        typology = "NONE"
-        detection_results["typology"] = "NONE"
-
-    steps.append({"name": "compute", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"confidence={confidence:.2f}, gate={'PASS' if confidence >= 0.5 else 'FAIL'}"})
-
-    # ── Step 6: DRAFT SAR ──
-    t0 = time.time()
-    sar_narrative = ""
-    sar_draft_dict = None
-    if typology != "NONE":
-        try:
-            draft = mechanical_sar_template(detection_results, graph_dict, jurisdiction)
-            sar_narrative = draft.raw_narrative
-            sar_draft_dict = {"who": draft.who, "what": draft.what, "where": draft.where,
-                              "when": draft.when, "why": draft.why, "cited_tx_ids": draft.cited_tx_ids}
-        except Exception as e:
-            logger.error("SAR drafting failed: %s", e)
-            sar_narrative = f"SAR generation failed: {e}"
-
-    steps.append({"name": "draft", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"{len(sar_narrative)} chars" if sar_narrative else "skipped"})
-
-    # ── Step 7: VALIDATE SAR ──
-    t0 = time.time()
-    validation_errors: list[str] = []
-    if sar_draft_dict:
-        graph_nodes = set(graph_dict.get("nodes", {}).keys())
-        graph_tx_ids = {tx["id"] for tx in graph_dict.get("transactions", [])}
-        for cited_tx in sar_draft_dict.get("cited_tx_ids", []):
-            if cited_tx not in graph_tx_ids:
-                validation_errors.append(f"Hallucinated TX: {cited_tx}")
-        for entity in sar_draft_dict.get("who", "").split(", "):
-            entity = entity.strip()
-            if entity and entity != "Entities not identified" and entity not in graph_nodes:
-                validation_errors.append(f"Hallucinated entity: {entity}")
-
-    steps.append({"name": "validate",
-                   "status": "complete" if not validation_errors else "warning",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"{len(validation_errors)} issues" if validation_errors else "passed"})
-
-    # ── Step 8: SUBMIT ──
-    t0 = time.time()
-    idem_input = f"{case_id}{typology}{''.join(sorted(involved))}"
-    idempotency_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
-
-    result.update({
-        "status": "COMPLETE",
-        "detected_typology": typology,
-        "involved_entities": involved,
-        "confidence_score": confidence,
-        "sar_narrative": sar_narrative,
-        "sar_draft": sar_draft_dict,
-        "evidence_package": evidence_package,
-        "detection_results": detection_results,
-        "validation_errors": validation_errors,
-        "idempotency_key": idempotency_key,
-        "investigation_timestamp": int(time.time()),
-        "steps": steps,
-    })
-
-    steps.append({"name": "submit", "status": "complete",
-                   "duration_ms": int((time.time() - t0) * 1000),
-                   "detail": f"idem_key={idempotency_key[:16]}..."})
-
+    # Store in AppState for retrieval by GET endpoints
     state.investigations[case_id] = result
     return result

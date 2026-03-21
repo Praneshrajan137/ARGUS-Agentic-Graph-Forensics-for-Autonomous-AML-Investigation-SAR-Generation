@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from src.config import (
+from tracer_agent.src.config import (
     RETRY_MAX_ATTEMPTS,
     RETRY_BASE_DELAY_SECONDS,
     JITTER_FACTOR,
@@ -38,7 +38,18 @@ from src.config import (
     REQUEST_TIMEOUT_SECONDS,
     IDEMPOTENCY_HASH_ALGO,
 )
-from protos import financial_crime_pb2 as pb2
+# Lazy import: protobuf descriptor collision occurs when both root protos/ and
+# tracer_agent/protos/ register the same financial_crime.proto file name.
+# In unified mode the protobuf module is never needed (graph is pre-populated),
+# so we defer the import to methods that actually use it.
+pb2 = None
+
+def _get_pb2():
+    global pb2
+    if pb2 is None:
+        from tracer_agent.protos import financial_crime_pb2
+        pb2 = financial_crime_pb2
+    return pb2
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +366,7 @@ class A2AClient:
         async def _do_fetch() -> dict[str, Any]:
             response = await client.post(
                 f"{self.forge_url}/a2a",
-                content=pb2.InvestigationRequest(
+                content=_get_pb2().InvestigationRequest(
                     subject_id=subject_id, hop_depth=hop_depth,
                 ).SerializeToString(),
                 headers={"Content-Type": PROTOBUF_CONTENT_TYPE},
@@ -363,7 +374,7 @@ class A2AClient:
             response.raise_for_status()
             content_type = response.headers.get("content-type", "")
             if PROTOBUF_CONTENT_TYPE in content_type:
-                fragment = pb2.GraphFragment()
+                fragment = _get_pb2().GraphFragment()
                 fragment.ParseFromString(response.content)
                 return _protobuf_to_dict(fragment)
             else:

@@ -7,7 +7,7 @@ import ErrorCard from '@/components/shared/ErrorCard';
 import TypologyBadge from '@/components/shared/TypologyBadge';
 import GlowCard from '@/components/shared/GlowCard';
 import { useQuery } from '@/hooks/useQuery';
-import { getGraphStats, getHealth } from '@/api/client';
+import { getGraphStats, getHealth, getAgentHealth } from '@/api/client';
 
 const stagger = {
   hidden: {},
@@ -49,6 +49,7 @@ function HeroBanner() {
 
 export default function Dashboard() {
   const { data: health, loading: healthLoading } = useQuery('health', getHealth);
+  const { data: agentHealth } = useQuery('agent-health', getAgentHealth);
   const { data: stats, loading: statsLoading, error, refetch } = useQuery(
     'graph-stats', getGraphStats, { enabled: health?.graph_loaded }
   );
@@ -100,6 +101,30 @@ export default function Dashboard() {
           <StatCard label="Avg Degree" value={stats?.avg_degree || 0} icon={AlertTriangle} color="amber" decimals={2} />
         </motion.div>
 
+        {/* Agent Status */}
+        {agentHealth && (
+          <motion.div variants={fadeUp}>
+            <GlowCard className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${
+                    agentHealth.status === 'healthy' ? 'bg-emerald-400' : 'bg-rose-400'
+                  }`} />
+                  <span className="text-sm font-semibold text-text-0">Purple Agent</span>
+                </div>
+                <span className="font-mono text-xs text-text-3">
+                  Tracer v{agentHealth.version} | {agentHealth.mode} mode
+                </span>
+                {agentHealth.graph_loaded && (
+                  <span className="font-mono text-xs text-text-3 ml-auto">
+                    {agentHealth.node_count} nodes · {agentHealth.edge_count} edges
+                  </span>
+                )}
+              </div>
+            </GlowCard>
+          </motion.div>
+        )}
+
         {/* Crime Intelligence */}
         <motion.div variants={fadeUp}>
           <GlowCard className="p-6">
@@ -124,6 +149,22 @@ export default function Dashboard() {
                   {crime.metadata?.total_amount && (
                     <p className="text-sm text-text-2">
                       Total: <span className="font-mono font-medium text-text-0">${crime.metadata.total_amount}</span>
+                    </p>
+                  )}
+                  {crime.metadata?.source_node && (
+                    <p className="text-sm text-text-2">
+                      Source: <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.source_node}</span>
+                      {crime.metadata?.dest_node && <> → <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.dest_node}</span></>}
+                    </p>
+                  )}
+                  {crime.metadata?.initial_amount && (
+                    <p className="text-sm text-text-2">
+                      Amount: <span className="font-mono font-medium text-text-0">${crime.metadata.initial_amount}</span>
+                    </p>
+                  )}
+                  {crime.metadata?.chain_length && (
+                    <p className="text-sm text-text-2">
+                      Chain: <span className="font-mono font-medium text-text-0">{crime.metadata.chain_length} hops</span>
                     </p>
                   )}
                 </div>

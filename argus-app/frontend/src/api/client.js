@@ -138,5 +138,15 @@ export const getBenchmarkProgress = (benchmarkId) =>
 
 export const getBenchmarks = () => request('/benchmark/list');
 
+// ═══ PURPLE AGENT ═══
+export const getAgentCard = () => request('/agent/agent.json');
+
+export const getAgentHealth = () => request('/agent/health');
+
+export const getAgentConfig = () => request('/agent/config');
+
+export const runBaselineInvestigation = (params) =>
+  request('/investigation/baseline', { method: 'POST', body: JSON.stringify(params), timeout: 30_000 });
+
 // ═══ RESET ═══
 export const resetState = () => request('/reset', { method: 'POST' });

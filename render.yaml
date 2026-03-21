@@ -20,3 +20,7 @@ services:
         value: "8000"
       - key: PYTHONPATH
         value: /app
+      - key: UNIFIED_MODE
+        value: "true"
+      - key: OPENAI_API_KEY
+        sync: false  # Set manually in Render dashboard (optional — mechanical SAR fallback when absent)

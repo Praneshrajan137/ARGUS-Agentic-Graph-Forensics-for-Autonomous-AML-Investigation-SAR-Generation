@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
-from src.config import (
+from tracer_agent.src.config import (
     DECAY_RATE_MIN,
     DECAY_RATE_MAX,
     DECAY_TOLERANCE,

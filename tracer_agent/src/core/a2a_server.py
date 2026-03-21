@@ -23,12 +23,23 @@ from typing import Any
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 
-from src.config import (
+from tracer_agent.src.config import (
     AGENT_VERSION,
     PROTOBUF_CONTENT_TYPE,
 )
-from src.core.decision_loop import build_workflow, InvestigationState
-from protos import financial_crime_pb2 as pb2
+from tracer_agent.src.core.decision_loop import build_workflow, InvestigationState
+# Lazy import: protobuf descriptor collision occurs when both root protos/ and
+# tracer_agent/protos/ register the same financial_crime.proto file name.
+# In unified mode the protobuf module is never needed (graph is pre-populated),
+# so we defer the import to methods that actually use it.
+pb2 = None
+
+def _get_pb2():
+    global pb2
+    if pb2 is None:
+        from tracer_agent.protos import financial_crime_pb2
+        pb2 = financial_crime_pb2
+    return pb2
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +96,7 @@ async def handle_investigation(request: Request) -> Response:
 
     try:
         if PROTOBUF_CONTENT_TYPE in content_type:
-            proto_req = pb2.InvestigationRequest()
+            proto_req = _get_pb2().InvestigationRequest()
             proto_req.ParseFromString(body)
             case_id = proto_req.case_id or f"CASE-{int(time.time())}"
             subject_id = proto_req.subject_id
@@ -192,7 +203,7 @@ async def handle_investigation(request: Request) -> Response:
     )
 
     if PROTOBUF_CONTENT_TYPE in request.headers.get("accept", ""):
-        proto_result = pb2.InvestigationResult(
+        proto_result = _get_pb2().InvestigationResult(
             case_id=result_dict["case_id"],
             sar_narrative=result_dict["sar_narrative"] or "",
             typology_detected=result_dict["typology_detected"],

@@ -56,7 +56,7 @@ services:
   # ==========================================================================
   tracer:
     build:
-      context: ./purple_agent
+      context: ./tracer_agent
       dockerfile: Dockerfile
     container_name: argus-tracer
     depends_on:

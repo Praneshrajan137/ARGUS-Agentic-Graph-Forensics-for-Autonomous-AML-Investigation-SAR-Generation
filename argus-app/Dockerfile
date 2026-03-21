@@ -22,11 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python deps
 COPY argus-app/backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt \
+    && python -m spacy download en_core_web_sm
 
 # Copy application code
 COPY src/ /app/src/
-COPY purple_agent/ /app/purple_agent/
+COPY tracer_agent/ /app/tracer_agent/
 COPY argus-app/backend/ /app/argus-app/backend/
 
 # Copy frontend build output
@@ -36,7 +37,8 @@ COPY --from=frontend-build /build/dist /app/argus-app/backend/static
 ENV PYTHONPATH=/app \
     ARGUS_ENV=production \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8000 \
+    UNIFIED_MODE=true
 
 EXPOSE 8000
 
