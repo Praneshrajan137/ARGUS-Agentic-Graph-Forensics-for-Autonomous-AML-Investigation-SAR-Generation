@@ -15,7 +15,7 @@ services:
       - key: DIFFICULTY
         value: "5"
       - key: GRAPH_SIZE
-        value: "500"
+        value: "5000"
       - key: PORT
         value: "8000"
       - key: PYTHONPATH

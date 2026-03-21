@@ -27,7 +27,7 @@ class AppState:
     benchmarks: dict[str, dict[str, Any]] = field(default_factory=dict)
     seed: int = 42
     difficulty: int = 5
-    graph_size: int = 1000
+    graph_size: int = 5000
     generated_at: str | None = None
     generation_error: str | None = None
     generation_epoch: float = field(default_factory=time.time)
