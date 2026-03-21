@@ -104,13 +104,18 @@ jobs:
 
       - name: Run tests with coverage
         run: |
+          # Hide repo-root src/ (Forge agent) to prevent import collision.
+          # tracer_agent tests do `from src.core.xxx import ...` — without this,
+          # Python can resolve to ../src/core/ which imports faker (not installed).
+          mv ../src ../src_forge_hidden
           pytest tests/ \
             --cov=src \
             --cov-report=term-missing \
             --cov-fail-under=0 \
             -v
-        env:
-          PYTHONPATH: ${{ github.workspace }}/tracer_agent
+          EXIT_CODE=$?
+          mv ../src_forge_hidden ../src
+          exit $EXIT_CODE
   # ════════════════════════════════════════════════════════════════
   # DOCKER BUILD — Both Agents
   # ════════════════════════════════════════════════════════════════

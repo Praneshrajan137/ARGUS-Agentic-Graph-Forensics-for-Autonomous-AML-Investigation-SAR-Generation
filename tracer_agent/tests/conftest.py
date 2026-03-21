@@ -3,77 +3,34 @@ Shared Test Infrastructure -- Purple Agent v12.0
 Contains ALL 16 fixtures used across test files.
 Every amount is Decimal. Every timestamp is deterministic.
 Every list output uses sorted() for determinism (PYTHONHASHSEED-safe).
-
-Fixtures:
-  1.  structuring_scenario           -- 20 criminal sources -> 1 mule (USD)
-  2.  layering_scenario              -- 4-hop chain with ~3% decay (5 nodes, 4 edges)
-  3.  mixed_scenario                 -- Both typologies + 50 noise nodes (cycle stress)
-  4.  sample_text_evidence           -- Text with planted discrepancies
-  5.  mock_llm_response              -- Deterministic SAR narrative (Five Ws)
-  6.  indian_scenario                -- INR structuring for PMLA/FIU-IND compliance
-  7.  multi_edge_scenario            -- 3 transactions between same A->B pair
-  8.  structuring_boundary_scenario  -- Exact threshold boundary testing
-  9.  empty_graph_scenario           -- Zero nodes, zero transactions
-  10. legitimate_only_scenario       -- Clean graph, zero crime (false-positive test)
-  11. layering_boundary_scenario     -- Decay rate boundary testing (exact 2%, 5%)
-  12. duplicate_txid_scenario        -- Duplicate tx IDs (keep first, log warning)
-  13. self_loop_scenario             -- Self-loops (source==target, log not reject)
-  14. confidence_scoring_scenario    -- Confidence gate testing (above/below/boundary)
-  15. super_node_scenario            -- High-degree hub node (> MAX_NODE_DEGREE)
-  16. mixed_currency_scenario        -- USD + INR on same mule (group by currency)
-
-MATHEMATICAL VERIFICATION (all independently computed with Python Decimal):
-  Structuring scenario total: sum(9000 + 40*i for i in 1..20) = 20*9000 + 40*(210) = $188,400
-  Structuring scenario timestamps: first=1700001800 (i=1), last=1700036000 (i=20), span=9.5h
-  Layering decay chain: 100000 * 0.97^0 = 100000, *0.97 = 97000, *0.97 = 94090, *0.97 = 91267.30
-  Mixed structuring: sum(9100 + 40*i for i in 1..15) = 15*9100 + 40*(120) = $141,300
-  Mixed layering decay: 50000, 48500 (3% of 50000=1500), 47045 (3% of 48500=1455)
-  Indian scenario: sum(900000 + 5000*i for i in 1..15) = 15*900000 + 5000*(120) = ₹14,100,000
-  Mixed currency USD: sum(9060 + 40*i for i in 1..12) = 12*9060 + 40*(78) = $111,840
-  Mixed currency INR: sum(900000 + 5000*i for i in 1..12) = 10800000 + 390000 = ₹11,190,000
-
-IEEE 754 SAFETY PROOF (confidence scoring values):
-  0.3 + 0.2 = 0.5 exactly in IEEE 754 (errors cancel) ✓
-  0.6 + 0.2 = 0.8 exactly ✓
-  0.3 + 0.2 + 0.2 = 0.7 exactly (0.5 + 0.2, both representable) ✓
-  All confidence_scoring_scenario expected_score values survive float comparison.
-  BITWISE VERIFIED: struct.pack('d', computed) == struct.pack('d', expected) for all 5 cases.
-
-CHAIN_LENGTH SEMANTICS:
-  "chain_length" = number of HOPS (directed edges/transactions), NOT number of nodes.
-  A chain: A -> B -> C -> D has chain_length=3 (3 hops) and 4 nodes.
-  MIN_CHAIN_LENGTH=3 means at least 3 hops are required to qualify as layering.
-
-INGESTION RULE (v10.0 Rule 3, inherited from v7.0):
-  Do NOT quantize Decimal at ingestion. Factory methods produce exact Decimal values.
-  Quantization happens ONLY at threshold comparison or SAR formatting.
-
-v12.0 RETAINED ALL v11.0 + EARLIER FIXES:
-  - make_transaction rejects zero-amount (strict positive) [MED-03]
-  - Fixture 14 uses boolean evidence fields [CRIT-05]
-  - Fixture 14 includes exact_boundary test [ENH-01]
-  - Fixture 3 includes expected aggregates [MED-10]
-  - Fixture 4 documents SWIFT discrepancy [MED-04]
-  - Fixture 16 math verified in module header [MED-14]
-  - Fixture 11 "below1pct" documented as 1.0% [MED-18]
-  - Fixture 3 Phase B limitation on expected_confidence_score_minimum [LOW-09]
-  - Fixture 5 mock_llm_response corrected [CRIT-10]
-  - Fixture 6 expected_total_criminal_inflow added [MED-23]
-  - Fixture 3 layering chain docstring disambiguated [MED-24]
-  - Fixture 14 confidence_threshold is float [LOW-10]
-
-v12.0 ADDITIONS:
-  - make_transaction: source/target non-empty validation [LOW-12]
-  - make_node: node_id non-empty validation [LOW-13]
-  - Fixture 2: expected_amounts added [MED-30]
-  - Fixture 3: noise ring cycle documented, ring metadata added [MED-29]
-  - Fixture 6: legitimate_nodes=[] added for structural parity [MED-28]
-  - Fixture 8: should_detect → in_range_sources, expected_scenario_detected added [MED-27]
-  - Fixture 10: expected_node_count, expected_tx_count added [LOW-14]
-  - Fixture 12: expected_kept_amounts, expected_kept_routes added [HIGH-20]
-  - Fixture 14: state_builder per test case for zero-mapping test wiring [HIGH-19]
-  - Fixture 15: structuring confound documented, expected_structuring_confound added [MED-26]
 """
+
+# ===================================================================
+# PATH ISOLATION (must execute before ANY `from src.*` import)
+# ===================================================================
+# In the monorepo, the repo root also has a `src/` package (Forge agent).
+# If the repo root is on sys.path (e.g. via PYTHONPATH, CWD, or pip),
+# Python resolves `from src.core.xxx import ...` to the WRONG package,
+# triggering `ModuleNotFoundError: No module named 'faker'` because
+# the Forge agent's src/core/__init__.py does `from .graph_generator import *`
+# which requires faker (not installed for Tracer Agent).
+# Fix: ensure tracer_agent/ is at sys.path[0] and remove any parent entry.
+import sys as _sys
+import os as _os
+
+_TRACER_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_REPO_ROOT = _os.path.dirname(_TRACER_ROOT)
+# Remove repo root if present (prevents import collision)
+while _REPO_ROOT in _sys.path:
+    _sys.path.remove(_REPO_ROOT)
+# Ensure tracer_agent/ is first
+if _TRACER_ROOT not in _sys.path:
+    _sys.path.insert(0, _TRACER_ROOT)
+elif _sys.path[0] != _TRACER_ROOT:
+    _sys.path.remove(_TRACER_ROOT)
+    _sys.path.insert(0, _TRACER_ROOT)
+# ===================================================================
+
 import pytest
 from decimal import Decimal
 from typing import Any
