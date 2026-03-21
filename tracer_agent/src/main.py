@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # Load .env BEFORE any other imports that read os.getenv()
 load_dotenv()
 
-from tracer_agent.src.config import (  # noqa: E402
+from src.config import (  # noqa: E402
     A2A_SERVER_HOST,
     A2A_SERVER_PORT,
     AGENT_VERSION,
@@ -92,7 +92,7 @@ def create_app():
     Deferred import to ensure logging is configured first and
     to avoid circular imports during testing.
     """
-    from tracer_agent.src.core.a2a_server import app as _app  # noqa: F811
+    from src.core.a2a_server import app as _app  # noqa: F811
     return _app
 
 

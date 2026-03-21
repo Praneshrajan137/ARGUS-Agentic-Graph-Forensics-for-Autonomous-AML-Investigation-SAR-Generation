@@ -25,7 +25,7 @@ from decimal import Decimal
 
 import networkx as nx
 
-from tracer_agent.src.config import MAX_DFS_DEPTH, MAX_PATHS_PER_SEARCH, MAX_NODE_DEGREE
+from src.config import MAX_DFS_DEPTH, MAX_PATHS_PER_SEARCH, MAX_NODE_DEGREE
 
 logger = logging.getLogger(__name__)
 

@@ -44,7 +44,7 @@ from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
 
-from tracer_agent.src.config import SAR_MAX_RETRY, CONFIDENCE_THRESHOLD
+from src.config import SAR_MAX_RETRY, CONFIDENCE_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ def analyze_graph(state: InvestigationState) -> InvestigationState:
         return state
 
     try:
-        from tracer_agent.src.core.a2a_client import A2AClient
+        from src.core.a2a_client import A2AClient
 
         client = A2AClient()
         graph_data = _run_async(
@@ -199,9 +199,9 @@ def detect_typology(state: InvestigationState) -> InvestigationState:
         return state
 
     try:
-        from tracer_agent.src.core.graph_reasoner import GraphReasoner
-        from tracer_agent.src.core.heuristics.structuring import detect_structuring
-        from tracer_agent.src.core.heuristics.layering import detect_layering
+        from src.core.graph_reasoner import GraphReasoner
+        from src.core.heuristics.structuring import detect_structuring
+        from src.core.heuristics.layering import detect_layering
 
         graph_data = state["graph_fragment"] or {"transactions": [], "nodes": {}}
         reasoner = GraphReasoner()
@@ -305,7 +305,7 @@ def synthesize_evidence(state: InvestigationState) -> InvestigationState:
         return {**state, "evidence_package": {"verdict": "NOT_APPLICABLE", "discrepancies": []}}
 
     try:
-        from tracer_agent.src.core.evidence_synthesizer import EvidenceSynthesizer
+        from src.core.evidence_synthesizer import EvidenceSynthesizer
 
         graph_data = state["graph_fragment"] or {}
         text_evidence = graph_data.get("text_evidence", [])
@@ -427,7 +427,7 @@ def draft_sar(state: InvestigationState) -> InvestigationState:
         return {**state, "sar_narrative": "", "sar_draft": None}
 
     try:
-        from tracer_agent.src.core.sar_drafter import SARDrafter
+        from src.core.sar_drafter import SARDrafter
 
         drafter = SARDrafter()
         draft = drafter.draft_sar(
@@ -460,7 +460,7 @@ def draft_sar(state: InvestigationState) -> InvestigationState:
         logger.error("[%s] LLM SAR drafting failed: %s", state["case_id"], e)
 
         try:
-            from tracer_agent.src.core.sar_drafter import mechanical_sar_template
+            from src.core.sar_drafter import mechanical_sar_template
             draft = mechanical_sar_template(
                 detection_results=state.get("detection_results") or {},
                 graph_data=state.get("graph_fragment") or {},
@@ -495,7 +495,7 @@ def validate_sar(state: InvestigationState) -> InvestigationState:
         }
 
     try:
-        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
+        from src.core.sar_drafter import SARDrafter, SARDraft
 
         drafter = SARDrafter()
         draft_data = state.get("sar_draft")
@@ -538,14 +538,14 @@ def submit_result(state: InvestigationState) -> InvestigationState:
     Bug 1 fix: passes case_id to A2AClient.submit_result().
     """
     try:
-        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
+        from src.core.sar_drafter import SARDrafter, SARDraft
 
         draft_data = state.get("sar_draft")
         formatted_narrative = state.get("sar_narrative", "")
 
         # v6.1 [ALN-05]: Mechanical fallback if narrative empty but crime detected
         if (not formatted_narrative or formatted_narrative == "") and state.get("detected_typology") != "NONE":
-            from tracer_agent.src.core.sar_drafter import mechanical_sar_template
+            from src.core.sar_drafter import mechanical_sar_template
             fallback_draft = mechanical_sar_template(
                 detection_results=state.get("detection_results") or {},
                 graph_data=state.get("graph_fragment") or {},
@@ -575,7 +575,7 @@ def submit_result(state: InvestigationState) -> InvestigationState:
             "idempotency_key": idempotency_key,
         }
 
-        from tracer_agent.src.core.a2a_client import A2AClient
+        from src.core.a2a_client import A2AClient
         client = A2AClient()
         _run_async(client.submit_result(result_dict, state["case_id"]))
 

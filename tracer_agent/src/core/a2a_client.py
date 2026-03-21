@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from tracer_agent.src.config import (
+from src.config import (
     RETRY_MAX_ATTEMPTS,
     RETRY_BASE_DELAY_SECONDS,
     JITTER_FACTOR,
@@ -47,7 +47,7 @@ pb2 = None
 def _get_pb2():
     global pb2
     if pb2 is None:
-        from tracer_agent.protos import financial_crime_pb2
+        from protos import financial_crime_pb2
         pb2 = financial_crime_pb2
     return pb2
 
