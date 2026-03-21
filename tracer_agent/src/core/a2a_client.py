@@ -319,6 +319,7 @@ class A2AClient:
             self._client = httpx.AsyncClient(
                 timeout=REQUEST_TIMEOUT_SECONDS,
                 headers={"Accept": PROTOBUF_CONTENT_TYPE},
+                verify=True,  # Explicit: enforce TLS certificate validation
             )
         return self._client
 

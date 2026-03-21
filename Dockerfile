@@ -76,7 +76,11 @@ ENV GRAPH_SIZE=5000 \
     A2A_SERVER_PORT=9090
 
 # ============================================================================
-# STAGE 5: STARTUP
+# STAGE 5: NON-ROOT USER & STARTUP
 # ============================================================================
+
+RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser -d /app appuser \
+    && chown -R appuser:appuser /app /mnt/user-data/outputs
+USER appuser
 
 CMD ["python", "main.py", "serve", "--generate-on-startup", "--host", "0.0.0.0", "--port", "9090"]

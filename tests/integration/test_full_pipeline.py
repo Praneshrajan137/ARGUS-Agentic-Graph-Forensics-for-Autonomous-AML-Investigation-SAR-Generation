@@ -5,14 +5,14 @@ End-to-end integration tests for the Green Financial Crime Agent.
 
 Tests cover:
 1. Graph generation performance
-2. Serialization (pickle round-trip)
+2. Serialization (JSON round-trip)
 3. Crime injection with skill scripts
 4. Validation workflow
 5. Complete pipeline execution
 """
 
 import pytest
-import pickle
+import json
 import time
 import sys
 from pathlib import Path
@@ -23,6 +23,8 @@ import networkx as nx
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 SKILLS_PATH = PROJECT_ROOT / ".claude" / "skills" / "financial-crime" / "scripts"
 sys.path.insert(0, str(SKILLS_PATH))
+
+from src.core.graph_generator import save_graph, load_graph
 
 
 # =============================================================================
@@ -76,71 +78,54 @@ class TestGraphGenerationPerformance:
 class TestSerialization:
     """Tests for graph serialization and deserialization."""
     
-    def test_pickle_round_trip(self, baseline_graph, tmp_path):
-        """Test that graph survives pickle round-trip."""
-        output_path = tmp_path / "test_graph.pkl"
-        
-        # Save
-        with open(output_path, 'wb') as f:
-            pickle.dump(baseline_graph, f)
-        
-        # Load
-        with open(output_path, 'rb') as f:
-            loaded_graph = pickle.load(f)
-        
-        # Verify
+    def test_json_round_trip(self, baseline_graph, tmp_path):
+        """Test that graph survives JSON round-trip."""
+        output_path = tmp_path / "test_graph.json"
+
+        save_graph(baseline_graph, output_path)
+        loaded_graph = load_graph(output_path)
+
         assert loaded_graph.number_of_nodes() == baseline_graph.number_of_nodes()
         assert loaded_graph.number_of_edges() == baseline_graph.number_of_edges()
-    
-    def test_pickle_preserves_node_attributes(self, baseline_graph, tmp_path):
-        """Test that node attributes are preserved after pickle."""
-        output_path = tmp_path / "test_graph.pkl"
-        
-        # Get a sample node's attributes
+
+    def test_json_preserves_node_attributes(self, baseline_graph, tmp_path):
+        """Test that node attributes are preserved after JSON serialization."""
+        output_path = tmp_path / "test_graph.json"
+
         sample_node = list(baseline_graph.nodes())[0]
         original_attrs = dict(baseline_graph.nodes[sample_node])
-        
-        # Save and load
-        with open(output_path, 'wb') as f:
-            pickle.dump(baseline_graph, f)
-        
-        with open(output_path, 'rb') as f:
-            loaded_graph = pickle.load(f)
-        
-        # Verify attributes preserved
+
+        save_graph(baseline_graph, output_path)
+        loaded_graph = load_graph(output_path)
+
         loaded_attrs = dict(loaded_graph.nodes[sample_node])
-        assert loaded_attrs == original_attrs
-    
-    def test_pickle_preserves_edge_attributes(self, baseline_graph, tmp_path):
-        """Test that edge attributes are preserved after pickle."""
-        output_path = tmp_path / "test_graph.pkl"
-        
-        # Get a sample edge's attributes
+        for key, val in original_attrs.items():
+            assert str(loaded_attrs[key]) == str(val)
+
+    def test_json_preserves_edge_attributes(self, baseline_graph, tmp_path):
+        """Test that edge attributes are preserved after JSON serialization."""
+        output_path = tmp_path / "test_graph.json"
+
         sample_edge = list(baseline_graph.edges())[0]
         original_attrs = dict(baseline_graph.edges[sample_edge])
-        
-        # Save and load
-        with open(output_path, 'wb') as f:
-            pickle.dump(baseline_graph, f)
-        
-        with open(output_path, 'rb') as f:
-            loaded_graph = pickle.load(f)
-        
-        # Verify attributes preserved
+
+        save_graph(baseline_graph, output_path)
+        loaded_graph = load_graph(output_path)
+
         loaded_attrs = dict(loaded_graph.edges[sample_edge])
-        assert loaded_attrs == original_attrs
+        for key, val in original_attrs.items():
+            assert str(loaded_attrs[key]) == str(val)
     
     def test_large_graph_serialization(self, tmp_path):
         """Test serialization of large graph."""
         from src.core.graph_generator import generate_scale_free_graph
-        
+
         G = generate_scale_free_graph(n_nodes=1000, seed=42)
-        output_path = tmp_path / "large_graph.pkl"
-        
+        output_path = tmp_path / "large_graph.json"
+
         # Should not raise
-        with open(output_path, 'wb') as f:
-            pickle.dump(G, f)
-        
+        save_graph(G, output_path)
+
         # Verify file was created and has content
         assert output_path.exists()
         assert output_path.stat().st_size > 0
@@ -318,16 +303,14 @@ class TestCompletePipeline:
         assert metrics['num_nodes'] == 100
         
         # Step 3: Save graph
-        output_path = tmp_path / "pipeline_graph.pkl"
-        with open(output_path, 'wb') as f:
-            pickle.dump(G, f)
-        
+        output_path = tmp_path / "pipeline_graph.json"
+        save_graph(G, output_path)
+
         assert output_path.exists()
-        
+
         # Step 4: Load and verify
-        with open(output_path, 'rb') as f:
-            loaded = pickle.load(f)
-        
+        loaded = load_graph(output_path)
+
         assert loaded.number_of_nodes() == G.number_of_nodes()
     
     def test_full_pipeline_with_skill_scripts(self, tmp_path):
@@ -351,11 +334,9 @@ class TestCompletePipeline:
         G, layer_truth = skills_layer(G, chain_length=5, seed=42)
         
         # Step 4: Save graph and ground truth
-        graph_path = tmp_path / "final_graph.pkl"
-        with open(graph_path, 'wb') as f:
-            pickle.dump(G, f)
-        
-        import json
+        graph_path = tmp_path / "final_graph.json"
+        save_graph(G, graph_path)
+
         truth_path = tmp_path / "ground_truth.json"
         with open(truth_path, 'w') as f:
             json.dump({
@@ -368,8 +349,7 @@ class TestCompletePipeline:
         assert truth_path.exists()
         
         # Step 6: Load and verify
-        with open(graph_path, 'rb') as f:
-            loaded_graph = pickle.load(f)
+        loaded_graph = load_graph(graph_path)
         
         with open(truth_path, 'r') as f:
             loaded_truth = json.load(f)

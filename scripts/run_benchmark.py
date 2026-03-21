@@ -61,7 +61,10 @@ class BenchmarkRunner:
         """
         self.seed = seed
         self.difficulty = difficulty
-        self.output_dir = output_dir or PROJECT_ROOT / "outputs"
+        self.output_dir = (output_dir or PROJECT_ROOT / "outputs").resolve()
+        # Guard against path traversal: output must be within PROJECT_ROOT
+        if not str(self.output_dir).startswith(str(PROJECT_ROOT.resolve())):
+            raise ValueError(f"output_dir must be within project root, got: {self.output_dir}")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Results storage
