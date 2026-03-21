@@ -23,9 +23,9 @@ class TestAgentCardSchema:
             )
 
     def test_name_matches_project(self):
-        if self.card["name"] != "Project_Gamma_Purple_Hunter":
+        if self.card["name"] != "argus-tracer":
             raise ValueError(
-                f"Expected name 'Project_Gamma_Purple_Hunter', got '{self.card['name']}'"
+                f"Expected name 'argus-tracer', got '{self.card['name']}'"
             )
 
     def test_version_is_semver(self):

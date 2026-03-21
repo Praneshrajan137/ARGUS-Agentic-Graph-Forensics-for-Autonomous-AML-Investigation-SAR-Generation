@@ -48,7 +48,7 @@ class TestAgentCardEndpoint:
         if response.status_code != 200:
             raise ValueError(f"Expected 200, got {response.status_code}")
         data = response.json()
-        if data["name"] != "Project_Gamma_Purple_Hunter":
+        if data["name"] != "argus-tracer":
             raise ValueError(f"Name mismatch: {data['name']}")
 
 
