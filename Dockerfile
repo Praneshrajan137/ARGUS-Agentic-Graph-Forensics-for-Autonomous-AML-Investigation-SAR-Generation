@@ -70,7 +70,7 @@ EXPOSE 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:9090/health || exit 1
 
-ENV GRAPH_SIZE=1000 \
+ENV GRAPH_SIZE=5000 \
     DIFFICULTY=5 \
     GENERATE_EVIDENCE=true \
     A2A_SERVER_PORT=9090

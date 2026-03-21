@@ -167,7 +167,7 @@ def get_graph_stats() -> dict[str, Any]:
     }
 
 
-def get_visualization_data(limit: int = 500) -> dict[str, Any]:
+def get_visualization_data(limit: int = 5000) -> dict[str, Any]:
     """Return nodes and edges for D3 force-directed graph.
 
     Node classification reads ALL crimes from ground_truth (not by index).
