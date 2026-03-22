@@ -46,7 +46,7 @@ def small_graph() -> nx.DiGraph:
     random.seed(42)
     
     for node in G.nodes():
-        G.nodes[node]['id'] = f"node_{node}"
+        G.nodes[node]['entity_id'] = f"node_{node}"
         G.nodes[node]['name'] = fake.name()
         G.nodes[node]['address'] = fake.address().replace('\n', ', ')
         G.nodes[node]['entity_type'] = random.choice(['person', 'company', 'bank'])
@@ -81,7 +81,7 @@ def baseline_graph() -> nx.DiGraph:
     
     for node in G.nodes():
         entity_type = random.choices(entity_types, weights=entity_weights)[0]
-        G.nodes[node]['id'] = f"node_{node}"
+        G.nodes[node]['entity_id'] = f"node_{node}"
         G.nodes[node]['entity_type'] = entity_type
         G.nodes[node]['name'] = fake.name() if entity_type == 'person' else fake.company()
         G.nodes[node]['address'] = fake.address().replace('\n', ', ')
