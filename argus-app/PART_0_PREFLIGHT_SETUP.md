@@ -76,7 +76,7 @@ from src.config import (
 )
 from decimal import Decimal
 
-# NOTE: VELOCITY_THRESHOLD is a TRACER-only constant (purple_agent/src/config.py).
+# NOTE: VELOCITY_THRESHOLD is a TRACER-only constant (tracer_agent/src/config.py).
 # It does NOT exist in src/config.py (FORGE). It will be defined locally in
 # tracer_service.py when TRACER detection logic is copied in Part 1B.
 
@@ -105,7 +105,7 @@ print(f"✓ EntityMetrics: {EntityMetrics}")
 print("═══ ALL FORGE IMPORTS PASSED — constant remapping verified ═══")
 
 # DO NOT import from src.core.a2a_interface — it creates a FastAPI app!
-# DO NOT import purple_agent modules via sys.path — namespace collision!
+# DO NOT import tracer_agent modules via sys.path — namespace collision!
 # Detection modules will be COPIED into tracer_service.py in Part 1B.
 ```
 

@@ -4,12 +4,13 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
+[![React 19](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 
 ---
 
 ## Abstract
 
-ARGUS is a two-agent system for financial crime detection evaluation. A **Forge Agent** generates synthetic financial transaction networks with surgically injected money laundering patterns, while a **Tracer Agent** autonomously investigates those networks, detects structuring and layering typologies, and generates regulatory-compliant Suspicious Activity Reports (SARs).
+ARGUS is a full-stack financial crime detection evaluation platform. A **Forge Agent** generates synthetic financial transaction networks (5,000 nodes, Barabasi-Albert scale-free topology) with surgically injected money laundering patterns, while a **Tracer Agent** autonomously investigates those networks, detects structuring and layering typologies, and generates regulatory-compliant Suspicious Activity Reports (SARs). A **Unified App** combines both agents with a React-based interactive frontend for graph visualization, investigation workflows, and assessment scoring.
 
 The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffers over HTTP, enabling realistic end-to-end AML investigation workflows.
 
@@ -17,8 +18,9 @@ The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffe
 
 | Component | Role | Port | Technology |
 |-----------|------|------|------------|
-| **Forge Agent** | World simulator, data generator, evaluator | `:8000` | NetworkX, SDV, Faker, FastAPI |
+| **Forge Agent** | World simulator, data generator, evaluator | `:9090` | NetworkX, SDV, Faker, FastAPI |
 | **Tracer Agent** | Autonomous forensic investigator | `:8080` | LangGraph, spaCy, GPT-4.1, FastAPI |
+| **Unified App** | Full-stack UI + integrated backend | `:8000` | FastAPI, React 19, D3.js, Vite |
 
 ### Key Capabilities
 
@@ -31,6 +33,7 @@ The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffe
 | **Locale-Aligned Entities** | SWIFT/IBAN/IFSC/PAN codes match country jurisdictions |
 | **Dynamic Difficulty** | 10 levels from trivial to expert |
 | **Mechanical Fallback** | SAR generation always succeeds, even without LLM access |
+| **Interactive Visualization** | D3.js canvas-based graph explorer for 5,000+ node networks |
 
 ---
 
@@ -40,17 +43,32 @@ The agents communicate via an Agent-to-Agent (A2A) protocol using Protocol Buffe
 
 - Docker and Docker Compose
 - Python 3.11+
+- Node.js 18+ (for frontend development)
 - An OpenAI API key (for LLM-based SAR generation; mechanical fallback works without it)
 
-### End-to-End Investigation (Recommended)
+### Unified App (Recommended)
+
+The unified app combines Forge + Tracer + React UI on a single port:
+
+```bash
+# Clone the repository
+git clone https://github.com/Praneshrajan137/ARGUS-Agentic-Graph-Forensics-for-Autonomous-AML-Investigation---SAR-Generation.git
+cd ARGUS-Agentic-Graph-Forensics-for-Autonomous-AML-Investigation---SAR-Generation
+
+# Deploy via Render (uses render.yaml)
+# Or run locally:
+cd argus-app
+pip install -r backend/requirements.txt
+cd frontend && npm install && npm run build && cd ..
+python -m backend.main
+# App available at http://localhost:8000
+```
+
+### End-to-End Investigation (Two-Agent Mode)
 
 Run a complete AML investigation with both agents communicating via A2A:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Praneshrajan137/The-Agentic-Financial-Defense-Swarm-Forensic-AML-Graph-Reasoning-Engine.git
-cd The-Agentic-Financial-Defense-Swarm-Forensic-AML-Graph-Reasoning-Engine
-
 # Set your OpenAI API key
 export OPENAI_API_KEY=sk-your-key-here
 
@@ -82,7 +100,7 @@ The trigger script sends investigation requests for known criminal nodes and rep
 # Build and run both agents
 docker-compose up --build
 
-# Forge Agent starts on :8000, generates data, waits for connections
+# Forge Agent starts on :9090, generates data, waits for connections
 # Tracer Agent starts on :8080, runs the Ralph Wiggum task loop
 ```
 
@@ -92,10 +110,10 @@ docker-compose up --build
 # Forge Agent
 pip install -r requirements.txt
 python main.py generate --output-dir ./outputs --seed 42 --difficulty 5
-python main.py serve --port 8000
+python main.py serve --port 9090
 
 # Tracer Agent (separate terminal)
-cd purple_agent
+cd tracer_agent
 cp .env.example .env   # Edit: set OPENAI_API_KEY
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
@@ -123,7 +141,17 @@ PYTHONHASHSEED=0 python -m src.main
 |  |  - SDV Gaussian Copula |         |  - GPT-4.1 SAR Drafter    | |
 |  |                        |         |  - Zero-Hallucination Val. | |
 |  +------------------------+         +---------------------------+ |
-|        :8000                               :8080                  |
+|        :9090                               :8080                  |
+|                                                                   |
+|  +--------------------------------------------------------------+ |
+|  |                     UNIFIED APP (:8000)                       | |
+|  |  FastAPI backend + React 19 frontend                          | |
+|  |  - D3.js canvas graph visualization (5,000+ nodes)            | |
+|  |  - Investigation pipeline UI with 8-step tracker              | |
+|  |  - Dual-jurisdiction SAR viewer (FinCEN / FIU-IND)            | |
+|  |  - Assessment scoring with rubric breakdown                   | |
+|  |  - Evidence browser with keyword search                       | |
+|  +--------------------------------------------------------------+ |
 +------------------------------------------------------------------+
 
 A2A Protocol Flow:
@@ -153,7 +181,7 @@ receive -> analyze -> detect -> synthesize -> compute_confidence
 
 | Module | Purpose | Technology |
 |--------|---------|------------|
-| `graph_generator.py` | Scale-free financial networks | NetworkX, Faker, SDV |
+| `graph_generator.py` | Scale-free financial networks (5,000 nodes) | NetworkX, Faker, SDV |
 | `crime_injector.py` | Structuring and layering patterns | Difficulty-based obfuscation |
 | `evidence_generator.py` | SARs, emails, conflicting docs | NLU challenge generation |
 | `a2a_interface.py` | HTTP API for Tracer Agents | FastAPI, Protobuf |
@@ -171,11 +199,20 @@ receive -> analyze -> detect -> synthesize -> compute_confidence
 | `a2a_client.py` | Forge Agent communication | httpx, circuit breaker |
 | `a2a_server.py` | Investigation endpoint | FastAPI |
 
+### Unified App Components
+
+| Module | Purpose | Technology |
+|--------|---------|------------|
+| `backend/main.py` | Unified FastAPI server (17+ endpoints) | FastAPI, Pydantic |
+| `frontend/src/components/graph/` | Interactive network visualization | D3.js (canvas), React 19 |
+| `frontend/src/pages/` | 9 application pages | React Router v7 |
+| `frontend/src/api/client.js` | API client with caching | Custom useQuery hook |
+
 ---
 
 ## API Reference
 
-### Forge Agent (`:8000`)
+### Forge Agent (`:9090`)
 
 All endpoints use JSON. Include `X-Participant-ID` header for efficiency tracking.
 
@@ -211,6 +248,20 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 
 **Tracer Agent `/a2a` response fields:** `case_id`, `sar_narrative`, `typology_detected`, `involved_entities`, `confidence_score`, `jurisdiction`, `investigation_timestamp`, `status`.
 
+### Unified App (`:8000`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health status |
+| `/api/generate` | POST | Generate new graph |
+| `/api/graph/stats` | GET | Graph statistics |
+| `/api/graph/visualization` | GET | Graph data for D3.js rendering |
+| `/api/nodes/{id}` | GET | Node details |
+| `/api/transactions` | GET | Transaction list |
+| `/api/evidence` | GET | Evidence document search |
+| `/api/investigation/submit` | POST | Start investigation |
+| `/api/assessment/results` | GET | View assessment results |
+
 ---
 
 ## Project Structure
@@ -222,6 +273,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 +-- docker-compose.yml               Multi-agent orchestration
 +-- docker-compose.e2e.yml           E2E override (Tracer as FastAPI server)
 +-- requirements.txt                 Forge Agent dependencies
++-- render.yaml                      Render.com deployment config
 +-- scenario.toml                    Scenario configuration
 +-- src/                             Forge Agent source
 |   +-- core/
@@ -232,7 +284,7 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 |   |   +-- sdv_models.py            Gaussian Copula models
 |   +-- utils/
 |       +-- validators.py            Input validation
-+-- purple_agent/                    Tracer Agent (autonomous investigator)
++-- tracer_agent/                    Tracer Agent (autonomous investigator)
 |   +-- Dockerfile                   Python 3.11, TCMalloc, non-root
 |   +-- requirements.txt             Pinned dependencies
 |   +-- src/
@@ -252,9 +304,27 @@ All endpoints use JSON. Include `X-Participant-ID` header for efficiency trackin
 |   +-- protos/                      Protobuf schema (FROZEN, shared)
 |   +-- README.md                    Tracer Agent documentation
 |   +-- ARCHITECTURE.md              Full architecture document
++-- argus-app/                       Unified full-stack application
+|   +-- Dockerfile                   Unified app container
+|   +-- backend/
+|   |   +-- main.py                  FastAPI server (17+ endpoints)
+|   |   +-- config.py                Unified app configuration
+|   |   +-- routes/                  API route modules
+|   |   +-- services/                Business logic (forge_service, etc.)
+|   |   +-- models/                  Pydantic schemas + state management
+|   +-- frontend/
+|       +-- src/
+|       |   +-- pages/               9 pages (Dashboard, GraphExplorer, etc.)
+|       |   +-- components/          Shared + domain-specific components
+|       |   +-- api/client.js        API client with caching
+|       |   +-- hooks/               useQuery, useHotkeys
+|       |   +-- index.css            Design system ("Forensic Elegance" v6.0)
+|       +-- vite.config.js           Vite bundler config
+|       +-- tailwind.config.js       TailwindCSS theme
 +-- scripts/
 |   +-- trigger_investigation.py     E2E investigation trigger
 |   +-- run_benchmark.py             Reproducibility benchmark
++-- protos/                          Shared Protobuf definitions
 +-- outputs/                         Generated data (gitignored)
 +-- tests/                           Forge Agent test suite
 ```
@@ -321,8 +391,12 @@ python scripts/run_benchmark.py --seed 42 --difficulty 5 --runs 3 --output resul
 pytest tests/ -v
 
 # Tracer Agent tests
-cd purple_agent
+cd tracer_agent
 PYTHONHASHSEED=0 pytest -p no:randomly -v --cov=src --cov-report=term-missing
+
+# Frontend tests
+cd argus-app/frontend
+npm run test
 ```
 
 ---
@@ -331,9 +405,14 @@ PYTHONHASHSEED=0 pytest -p no:randomly -v --cov=src --cov-report=term-missing
 
 | Document | Location | Description |
 |----------|----------|-------------|
-| Tracer Agent README | [`purple_agent/README.md`](purple_agent/README.md) | Quick start, configuration, API |
-| Tracer Agent Architecture | [`purple_agent/ARCHITECTURE.md`](purple_agent/ARCHITECTURE.md) | Full system design, 28 rules, state machine |
-| Tracer Agent Changelog | [`purple_agent/CHANGELOG.md`](purple_agent/CHANGELOG.md) | Release history |
+| Tracer Agent README | [`tracer_agent/README.md`](tracer_agent/README.md) | Quick start, configuration, API |
+| Tracer Agent Architecture | [`tracer_agent/ARCHITECTURE.md`](tracer_agent/ARCHITECTURE.md) | Full system design, 28 rules, state machine |
+| Tracer Agent Changelog | [`tracer_agent/CHANGELOG.md`](tracer_agent/CHANGELOG.md) | Release history |
+| Unified App README | [`argus-app/README.md`](argus-app/README.md) | Full-stack app setup and API |
+| Frontend README | [`argus-app/frontend/README.md`](argus-app/frontend/README.md) | React frontend architecture |
+| Architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) | System-wide architecture document |
+| Decisions | [`DECISIONS.md`](DECISIONS.md) | Architectural Decision Records |
+| PRD | [`PRD.md`](PRD.md) | Product Requirements Document |
 | Scenario Config | [`scenario.toml`](scenario.toml) | Forge Agent scenario parameters |
 
 ---
@@ -343,11 +422,12 @@ PYTHONHASHSEED=0 pytest -p no:randomly -v --cov=src --cov-report=term-missing
 ```bibtex
 @software{argus_aml,
   title = {ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation},
+  author = {Pranesh Rajan},
   year = {2026},
-  url = {https://github.com/Praneshrajan137/The-Agentic-Financial-Defense-Swarm-Forensic-AML-Graph-Reasoning-Engine}
+  url = {https://github.com/Praneshrajan137/ARGUS-Agentic-Graph-Forensics-for-Autonomous-AML-Investigation---SAR-Generation}
 }
 ```
 
 ---
 
-**Version:** 7.1.0 | **Status:** Production Ready
+**Version:** 8.0.0 | **Status:** Production Ready

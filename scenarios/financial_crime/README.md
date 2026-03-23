@@ -71,7 +71,7 @@ python src/baseline_agent.py --nodes 0 42 100
 **Purpose:** Generate forensic reality
 
 **Components:**
-- **Graph Generator** - NetworkX scale-free topology (1,000 nodes)
+- **Graph Generator** - NetworkX scale-free topology (5,000 nodes)
 - **SDV Models** - Gaussian Copulas for statistical correlations
 - **Crime Injector** - Structuring (smurfing) & Layering patterns
 - **Evidence Generator** - SARs, emails, conflicting documents
@@ -225,7 +225,7 @@ project_root/                           # Forge Agent lives at root
 ## Performance Metrics
 
 **Graph Generation:**
-- 1,000 nodes in <10 seconds
+- 5,000 nodes in <10 seconds
 - Memory usage <2GB
 - Protobuf 80% smaller than JSON
 

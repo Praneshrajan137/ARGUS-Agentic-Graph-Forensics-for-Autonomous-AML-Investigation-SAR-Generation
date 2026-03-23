@@ -245,7 +245,7 @@ All configuration is centralized in `src/config.py` (SSOT). Runtime overrides vi
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `forge_agent_URL` | `http://localhost:9090` | Upstream agent URL |
+| `FORGE_URL` | `http://localhost:9090` | Upstream Forge Agent URL |
 | `A2A_SERVER_HOST` | `0.0.0.0` | Bind host |
 | `A2A_SERVER_PORT` | `8080` | Bind port |
 

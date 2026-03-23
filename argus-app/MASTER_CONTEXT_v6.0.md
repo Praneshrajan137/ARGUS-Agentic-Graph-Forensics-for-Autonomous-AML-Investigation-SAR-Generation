@@ -3,7 +3,7 @@
 PROJECT: ARGUS: Agentic Graph Forensics for Autonomous AML Investigation & SAR Generation
 STATUS: Backend (FORGE + TRACER) COMPLETE. Building unified full-stack application.
 FORGE VERSION: 8.0.0 (src/config.py AGENT_VERSION)
-TRACER VERSION: 7.0.0 (purple_agent/src/config.py AGENT_VERSION)
+TRACER VERSION: 7.0.0 (tracer_agent/src/config.py AGENT_VERSION)
 UNIFIED APP VERSION: 1.0.0
 
 ARCHITECTURE:
@@ -25,7 +25,7 @@ MONOREPO LAYOUT (existing code stays in place):
   │   ├── result_types.py          # EntityMetrics, HallucinationCheck, FiveWsValidation — SAFE
   │   └── financial_crime_pb2.py   # Protobuf bindings (use THIS one)
   ├── src/config.py                # Forge config: AGENT_VERSION="8.0.0", all thresholds as Decimal
-  ├── purple_agent/src/core/       # TRACER agent (COPY into tracer_service.py)
+  ├── tracer_agent/src/core/       # TRACER agent (COPY into tracer_service.py)
   ├── argus-app/                   # NEW: unified full-stack application
   │   ├── backend/
   │   └── frontend/
@@ -41,7 +41,7 @@ IMPORT STRATEGY (v5.0 COPY approach — unchanged):
     DECAY_RATE_MAX = LAYERING_MAX_DECAY   # Decimal("0.05")
     SPACY_MODEL_NAME = "en_core_web_sm"
 
-  NOTE: VELOCITY_THRESHOLD is a TRACER-only constant (purple_agent/src/config.py).
+  NOTE: VELOCITY_THRESHOLD is a TRACER-only constant (tracer_agent/src/config.py).
   It does NOT exist in src/config.py and must be defined locally in tracer_service.py.
 
 GRAPH DATA BRIDGE (v5.0 field mapping — unchanged):
