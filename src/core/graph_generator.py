@@ -273,7 +273,7 @@ def _add_transaction_attributes_sdv(
     synthesizer.reset_sampling()
     
     # Oversample: generate more rows than needed for variety
-    oversample_size = max(num_edges * 2, min(1000, num_edges * 3))
+    oversample_size = min(max(num_edges + 500, 1000), 10000)
     synthetic_pool = synthesizer.sample(num_rows=oversample_size)
     
     # Use seed to deterministically shuffle and select

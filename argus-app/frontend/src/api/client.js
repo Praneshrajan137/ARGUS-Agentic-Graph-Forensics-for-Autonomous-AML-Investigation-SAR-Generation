@@ -73,7 +73,7 @@ export const getHealth = () => request('/health');
 
 // ═══ GENERATION ═══
 export const generateWorld = (params) =>
-  request('/generate', { method: 'POST', body: JSON.stringify(params), timeout: 60_000 });
+  request('/generate', { method: 'POST', body: JSON.stringify(params), timeout: 180_000 });
 
 // ═══ GRAPH ═══
 export const getGraphStats = () => request('/graph/stats');

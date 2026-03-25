@@ -1,4 +1,5 @@
 """Assessment, ground-truth, config, and reset routes."""
+import logging
 from fastapi import APIRouter, HTTPException
 from decimal import Decimal
 
@@ -23,6 +24,8 @@ from src.config import (
 
 import time
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["assessment"])
 
@@ -86,18 +89,26 @@ async def get_config():
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_graph(request: GenerateRequest):
-    """Generate a new synthetic financial world with injected crimes."""
-    state = get_state()
+    """Generate a new synthetic financial world with injected crimes.
 
-    # Reset state before regeneration
-    reset_state()
-    state = get_state()
+    NOTE: We do NOT call reset_state() before generation. generate_world()
+    overwrites state.graph on success. If generation fails, the previous
+    graph is preserved so the user isn't left with an empty dashboard.
+    """
+    try:
+        generate_world(
+            seed=request.seed,
+            difficulty=request.difficulty,
+            node_count=request.node_count,
+        )
+    except Exception as e:
+        logger.error("Graph generation failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Graph generation failed for {request.node_count} nodes: {e}",
+        )
 
-    generate_world(
-        seed=request.seed,
-        difficulty=request.difficulty,
-        node_count=request.node_count,
-    )
+    state = get_state()
     state.generation_epoch = time.time()
 
     return GenerateResponse(
