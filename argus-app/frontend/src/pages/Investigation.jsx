@@ -6,7 +6,7 @@ import GlowCard from '@/components/shared/GlowCard';
 import InvestigationForm from '@/components/investigation/InvestigationForm';
 import PipelineTracker from '@/components/investigation/PipelineTracker';
 import InvestigationResults from '@/components/investigation/InvestigationResults';
-import { runInvestigation } from '@/api/client';
+import { runInvestigation, getInvestigationProgress, getInvestigation } from '@/api/client';
 import { useToast } from '@/contexts/ToastContext';
 
 /** Page-level stagger animation */
@@ -26,7 +26,6 @@ const fadeUp = {
 
 /**
  * The 8 pipeline step names in execution order.
- * Used for Approach B animated simulation during the synchronous API call.
  */
 const STEP_NAMES = [
   'receive',
@@ -38,6 +37,15 @@ const STEP_NAMES = [
   'validate',
   'submit',
 ];
+
+/* eslint-disable no-console */
+const logger_warn = (...args) => console.warn('[Investigation]', ...args);
+
+/** Max polling duration before giving up (5 minutes) */
+const MAX_POLL_MS = 5 * 60 * 1000;
+
+/** Polling interval (2 seconds) */
+const POLL_INTERVAL_MS = 2000;
 
 /**
  * Creates the initial pipeline state — all steps pending.
@@ -51,7 +59,23 @@ function createInitialPipelineState() {
 }
 
 /**
- * Updates pipeline state from the real API response.
+ * Maps progress endpoint steps to PipelineTracker state.
+ * Converts 'running' → 'active' for the pulsing animation.
+ */
+function stepsToState(steps) {
+  const state = {};
+  for (const step of steps || []) {
+    state[step.name] = step.status === 'running' ? 'active' : step.status;
+  }
+  // Fill in any missing steps as pending
+  for (const name of STEP_NAMES) {
+    if (!state[name]) state[name] = 'pending';
+  }
+  return state;
+}
+
+/**
+ * Updates pipeline state from the final API response.
  * Maps step names to their actual status and marks post-failure steps as skipped.
  */
 function updatePipelineFromResult(result) {
@@ -83,50 +107,86 @@ function updatePipelineFromResult(result) {
 /**
  * /investigate page — the operational core of ARGUS.
  *
- * Orchestrates: InvestigationForm → PipelineTracker (animated) → InvestigationResults
- * Uses Approach B: synchronous POST with animated pipeline simulation.
+ * Orchestrates: InvestigationForm → PipelineTracker (live polling) → InvestigationResults
+ * Uses fire-and-poll: POST returns instantly, frontend polls progress endpoint.
  */
 export default function Investigation() {
   const [searchParams] = useSearchParams();
   const { addToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pipelineState, setPipelineState] = useState({});
+  const [stepDetails, setStepDetails] = useState({});
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const intervalRef = useRef(null);
+  const pollRef = useRef(null);
+  const pollStartRef = useRef(null);
 
-  // Cleanup interval on unmount
+  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
 
   /**
-   * Approach B: Animated pipeline simulation during synchronous fetch.
-   * Advances steps sequentially every 400ms. Real result snaps to truth.
+   * Poll the progress endpoint for real-time step updates.
+   * Stops when status is COMPLETE or FAILED, then fetches the full result.
    */
-  const startPipelineAnimation = useCallback(() => {
-    let currentIdx = 0;
-    intervalRef.current = setInterval(() => {
-      if (currentIdx >= STEP_NAMES.length) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+  const startPolling = useCallback((caseId) => {
+    pollStartRef.current = Date.now();
+
+    pollRef.current = setInterval(async () => {
+      // Safety timeout: stop polling after 5 minutes
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        setError('Investigation timed out — check SAR Viewer for results');
+        setIsSubmitting(false);
+        addToast('Investigation polling timed out', 'warning');
         return;
       }
-      setPipelineState((prev) => {
-        const updated = { ...prev };
-        // Complete previous step
-        if (currentIdx > 0) {
-          updated[STEP_NAMES[currentIdx - 1]] = 'complete';
+
+      try {
+        const progress = await getInvestigationProgress(caseId);
+
+        // Update pipeline state from real step data
+        setPipelineState(stepsToState(progress.steps));
+        setStepDetails(
+          (progress.steps || []).reduce((acc, s) => ({ ...acc, [s.name]: s }), {})
+        );
+
+        // Terminal state: fetch full result
+        if (progress.status === 'COMPLETE' || progress.status === 'FAILED') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+
+          try {
+            const fullResult = await getInvestigation(caseId);
+            setResult(fullResult);
+            setPipelineState(updatePipelineFromResult(fullResult));
+            setStepDetails(
+              (fullResult.steps || []).reduce((acc, s) => ({ ...acc, [s.name]: s }), {})
+            );
+
+            if (fullResult.status === 'COMPLETE') {
+              addToast(`Investigation complete — case ${caseId}`, 'success');
+            } else {
+              setError(fullResult.error || 'Investigation failed');
+              addToast(`Investigation failed: ${fullResult.error || 'unknown error'}`, 'error');
+            }
+          } catch (fetchErr) {
+            setError(fetchErr.message || 'Failed to fetch investigation result');
+            addToast(`Failed to fetch result: ${fetchErr.message}`, 'error');
+          }
+
+          setIsSubmitting(false);
         }
-        // Activate current step
-        updated[STEP_NAMES[currentIdx]] = 'active';
-        return updated;
-      });
-      currentIdx++;
-    }, 400);
-  }, []);
+      } catch (pollErr) {
+        // Polling error — don't stop, backend might be temporarily busy
+        logger_warn('Poll error:', pollErr.message);
+      }
+    }, POLL_INTERVAL_MS);
+  }, [addToast]);
 
   const handleSubmit = useCallback(
     async (formData) => {
@@ -134,11 +194,10 @@ export default function Investigation() {
       setResult(null);
       setError(null);
       setPipelineState(createInitialPipelineState());
-
-      // Start animation
-      startPipelineAnimation();
+      setStepDetails({});
 
       try {
+        // Fire: POST returns immediately with case_id + PENDING
         const response = await runInvestigation({
           subject_id: formData.subject_id,
           hop_depth: formData.hop_depth,
@@ -146,45 +205,35 @@ export default function Investigation() {
           case_id: formData.case_id,
         });
 
-        // Stop animation and snap to real state
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
+        const caseId = response.case_id;
+
+        // If backend already completed (fast investigation), use result directly
+        if (response.status === 'COMPLETE' || response.status === 'FAILED') {
+          setResult(response);
+          setPipelineState(updatePipelineFromResult(response));
+          setStepDetails(
+            (response.steps || []).reduce((acc, s) => ({ ...acc, [s.name]: s }), {})
+          );
+          if (response.status === 'COMPLETE') {
+            addToast(`Investigation complete — case ${caseId}`, 'success');
+          } else {
+            setError(response.error || 'Investigation failed');
+            addToast(`Investigation failed: ${response.error || 'unknown'}`, 'error');
+          }
+          setIsSubmitting(false);
+          return;
         }
 
-        setResult(response);
-        setPipelineState(updatePipelineFromResult(response));
-        addToast(`Investigation complete — case ${response.case_id || 'unknown'}`, 'success');
+        // Poll: start polling for real-time progress
+        startPolling(caseId);
       } catch (err) {
-        // Stop animation
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-
-        setError(err.message || 'Investigation failed');
+        setError(err.message || 'Investigation failed to launch');
         setResult({ status: 'FAILED', error: err.message });
         addToast(`Investigation failed: ${err.message}`, 'error');
-
-        // Mark current and remaining steps as failed/skipped
-        setPipelineState((prev) => {
-          const updated = { ...prev };
-          let foundActive = false;
-          for (const name of STEP_NAMES) {
-            if (updated[name] === 'active') {
-              updated[name] = 'failed';
-              foundActive = true;
-            } else if (foundActive && updated[name] === 'pending') {
-              updated[name] = 'skipped';
-            }
-          }
-          return updated;
-        });
-      } finally {
         setIsSubmitting(false);
       }
     },
-    [startPipelineAnimation, addToast]
+    [startPolling, addToast]
   );
 
   const hasStarted = isSubmitting || Object.keys(pipelineState).length > 0;
@@ -222,12 +271,7 @@ export default function Investigation() {
               </h3>
               <PipelineTracker
                 stepStates={pipelineState}
-                stepDetails={
-                  result?.steps?.reduce(
-                    (acc, s) => ({ ...acc, [s.name]: s }),
-                    {}
-                  ) || {}
-                }
+                stepDetails={stepDetails}
               />
             </GlowCard>
           </motion.div>
@@ -296,7 +340,7 @@ export default function Investigation() {
         )}
 
         {/* Results: visible after completion */}
-        {result && result.status !== 'IN_PROGRESS' && result.status !== 'FAILED' && (
+        {result && result.status !== 'IN_PROGRESS' && result.status !== 'PENDING' && result.status !== 'FAILED' && (
           <motion.div variants={fadeUp}>
             <GlowCard className="p-6">
               <InvestigationResults result={result} />

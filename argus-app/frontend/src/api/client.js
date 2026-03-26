@@ -98,7 +98,7 @@ export const getNodeConnections = (nodeId) =>
 
 // ═══ INVESTIGATION ═══
 export const runInvestigation = (params) =>
-  request('/investigation/investigate', { method: 'POST', body: JSON.stringify(params), timeout: 30_000 });
+  request('/investigation/investigate', { method: 'POST', body: JSON.stringify(params), timeout: 10_000 });
 
 export const getInvestigations = () => request('/investigation/list');
 

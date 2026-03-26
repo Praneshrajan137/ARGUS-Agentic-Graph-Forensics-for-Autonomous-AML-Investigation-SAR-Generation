@@ -9,7 +9,7 @@ export default function InvestigationListPanel({ investigations, selectedId, onS
   // Filter to only those with SAR narratives, then by search
   const filtered = useMemo(() => {
     return (investigations || [])
-      .filter(inv => inv.sar_narrative && inv.sar_narrative.length > 0)
+      .filter(inv => (inv.sar_narrative && inv.sar_narrative.length > 0) || inv.sar_draft)
       .filter(inv => !search || inv.case_id.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => (b.investigation_timestamp || 0) - (a.investigation_timestamp || 0));
   }, [investigations, search]);

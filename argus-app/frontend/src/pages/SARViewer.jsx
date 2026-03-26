@@ -51,7 +51,7 @@ export default function SARViewer() {
   }
 
   const investigationList = investigations?.investigations || investigations || [];
-  const sarInvestigations = investigationList.filter(inv => inv.sar_narrative);
+  const sarInvestigations = investigationList.filter(inv => inv.sar_narrative || inv.sar_draft);
 
   if (sarInvestigations.length === 0) {
     return (

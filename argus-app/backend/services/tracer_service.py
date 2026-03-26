@@ -37,6 +37,18 @@ from tracer_agent.src.core.evidence_synthesizer import (
 from tracer_agent.src.core.decision_loop import (
     build_workflow,
     InvestigationState,
+    # Node functions (for step-by-step execution with progress tracking)
+    receive_case,
+    analyze_graph,
+    detect_typology,
+    synthesize_evidence,
+    compute_confidence,
+    draft_sar,
+    validate_sar,
+    submit_result,
+    # Conditional edge functions
+    should_generate_sar,
+    should_retry,
 )
 
 # ═══ A2A Infrastructure ═══
@@ -90,6 +102,10 @@ __all__ = [
     "EvidenceSynthesizer", "EvidenceResult",
     # Workflow
     "build_workflow", "InvestigationState",
+    "receive_case", "analyze_graph", "detect_typology",
+    "synthesize_evidence", "compute_confidence",
+    "draft_sar", "validate_sar", "submit_result",
+    "should_generate_sar", "should_retry",
     # A2A
     "A2AClient", "CircuitBreaker", "CircuitBreakerOpen",
     # Config

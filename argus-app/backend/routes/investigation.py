@@ -1,4 +1,7 @@
 """Investigation routes — 4 endpoints for running and querying investigations."""
+import asyncio
+import threading
+import time
 import uuid
 from fastapi import APIRouter, HTTPException
 
@@ -15,7 +18,11 @@ router = APIRouter(prefix="/api/investigation", tags=["investigation"])
 
 @router.post("/investigate", response_model=InvestigationResponse)
 async def create_investigation(request: InvestigationRequest):
-    """Run the full 8-step investigation pipeline on a subject."""
+    """Launch the 8-step investigation pipeline in a background thread.
+
+    Returns immediately with case_id + PENDING status.
+    Frontend polls GET /{case_id}/progress for real-time step updates.
+    """
     state = get_state()
     if state.graph is None:
         raise HTTPException(status_code=400, detail="No graph loaded. Generate first.")
@@ -33,14 +40,34 @@ async def create_investigation(request: InvestigationRequest):
     if resolved is None:
         raise HTTPException(status_code=404, detail=f"Subject not found: {subject_id}")
 
-    result = run_investigation(
-        case_id=case_id,
-        subject_id=str(resolved),
-        hop_depth=request.hop_depth,
-        jurisdiction=request.jurisdiction,
+    # Fire-and-return: launch investigation in background thread
+    thread = threading.Thread(
+        target=run_investigation,
+        kwargs={
+            "case_id": case_id,
+            "subject_id": str(resolved),
+            "hop_depth": request.hop_depth,
+            "jurisdiction": request.jurisdiction,
+        },
+        daemon=True,
     )
+    thread.start()
 
-    return result
+    # Give thread a moment to seed state.investigations[case_id]
+    time.sleep(0.05)
+
+    # Return the PENDING investigation entry
+    investigation = state.investigations.get(case_id)
+    if investigation is None:
+        # Thread hasn't seeded yet — return a minimal PENDING response
+        return InvestigationResponse(
+            case_id=case_id,
+            subject_id=str(resolved),
+            jurisdiction=request.jurisdiction,
+            status="PENDING",
+        )
+
+    return investigation
 
 
 @router.get("/list", response_model=InvestigationListResponse)
@@ -109,7 +136,8 @@ async def baseline_investigation(request: InvestigationRequest):
     if resolved is None:
         raise HTTPException(status_code=404, detail=f"Subject not found: {subject_id}")
 
-    result = run_baseline_investigation(
+    result = await asyncio.to_thread(
+        run_baseline_investigation,
         subject_id=str(resolved),
         hop_depth=request.hop_depth,
     )
