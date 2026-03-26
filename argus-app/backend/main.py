@@ -86,30 +86,45 @@ async def lifespan(app: FastAPI):
     """Application lifespan: generate graph on startup, cleanup on shutdown."""
     seed = int(os.getenv("SEED", "42"))
     difficulty = int(os.getenv("DIFFICULTY", "5"))
-    graph_size = int(os.getenv("GRAPH_SIZE", "5000"))
+    raw_graph_size = os.getenv("GRAPH_SIZE")
+    graph_size = int(raw_graph_size) if raw_graph_size else 5000
 
     logger.info(
-        "ARGUS backend starting — seed=%d, difficulty=%d, graph_size=%d",
-        seed, difficulty, graph_size,
+        "ARGUS backend starting — seed=%d, difficulty=%d, graph_size=%d (env GRAPH_SIZE=%r)",
+        seed, difficulty, graph_size, raw_graph_size,
     )
 
     t0 = time.time()
-    try:
-        generate_world(seed=seed, difficulty=difficulty, node_count=graph_size)
-        state = get_state()
-        state.generation_epoch = time.time()
-        elapsed = time.time() - t0
-        logger.info(
-            "World generated in %.2fs — %d nodes, %d edges, %d evidence docs",
-            elapsed,
-            state.graph.number_of_nodes() if state.graph else 0,
-            state.graph.number_of_edges() if state.graph else 0,
-            len(state.evidence_documents),
-        )
-    except Exception as e:
-        logger.error("Failed to generate world: %s", e, exc_info=True)
-        state = get_state()
-        state.generation_error = str(e)
+    state = get_state()
+    generated = False
+
+    for attempt_size in [graph_size, 2000, 500]:
+        try:
+            logger.info("Attempting world generation with %d nodes...", attempt_size)
+            generate_world(seed=seed, difficulty=difficulty, node_count=attempt_size)
+            state.generation_epoch = time.time()
+            elapsed = time.time() - t0
+            logger.info(
+                "World generated in %.2fs — %d nodes, %d edges, %d evidence docs",
+                elapsed,
+                state.graph.number_of_nodes() if state.graph else 0,
+                state.graph.number_of_edges() if state.graph else 0,
+                len(state.evidence_documents),
+            )
+            if attempt_size < graph_size:
+                logger.warning(
+                    "Generated %d nodes (requested %d) due to resource limits. "
+                    "Regenerate full size from Settings page.",
+                    attempt_size, graph_size,
+                )
+            generated = True
+            break
+        except Exception as e:
+            logger.error("Failed to generate %d-node world: %s", attempt_size, e, exc_info=True)
+
+    if not generated:
+        logger.critical("ALL generation attempts failed. Dashboard will show 0 nodes.")
+        state.generation_error = "All generation attempts failed"
 
     yield
 
