@@ -141,28 +141,28 @@ export default function Dashboard() {
                       {crime.node_count} nodes · {crime.edge_count} edges
                     </span>
                   </div>
-                  {crime.metadata?.mule_id && (
+                  {crime.metadata?.mule_id != null && (
                     <p className="text-sm text-text-2">
                       Mule: <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.mule_id}</span>
                     </p>
                   )}
-                  {crime.metadata?.total_amount && (
+                  {crime.metadata?.total_amount != null && (
                     <p className="text-sm text-text-2">
                       Total: <span className="font-mono font-medium text-text-0">${crime.metadata.total_amount}</span>
                     </p>
                   )}
-                  {crime.metadata?.source_node && (
+                  {crime.metadata?.source_node != null && (
                     <p className="text-sm text-text-2">
                       Source: <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.source_node}</span>
-                      {crime.metadata?.dest_node && <> → <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.dest_node}</span></>}
+                      {crime.metadata?.dest_node != null && <> → <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.dest_node}</span></>}
                     </p>
                   )}
-                  {crime.metadata?.initial_amount && (
+                  {crime.metadata?.initial_amount != null && (
                     <p className="text-sm text-text-2">
                       Amount: <span className="font-mono font-medium text-text-0">${crime.metadata.initial_amount}</span>
                     </p>
                   )}
-                  {crime.metadata?.chain_length && (
+                  {crime.metadata?.chain_length != null && (
                     <p className="text-sm text-text-2">
                       Chain: <span className="font-mono font-medium text-text-0">{crime.metadata.chain_length} hops</span>
                     </p>
