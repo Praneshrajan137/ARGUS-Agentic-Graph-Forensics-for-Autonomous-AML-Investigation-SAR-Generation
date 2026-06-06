@@ -12,6 +12,7 @@ Test Categories:
 """
 
 import networkx as nx
+import random
 from decimal import Decimal
 
 from src.core.crime_injector import (
@@ -284,6 +285,17 @@ class TestInjectStructuring:
         for edge in crime.edges_involved:
             assert edge[1] == mule_id
 
+    def test_seed_does_not_mutate_global_random_state(self, small_graph):
+        """Test that seeded structuring injection uses an isolated RNG."""
+        random.seed(98765)
+        expected_rng = random.Random(98765)
+        expected_values = [expected_rng.random() for _ in range(3)]
+
+        inject_structuring(small_graph, seed=42)
+
+        actual_values = [random.random() for _ in range(3)]
+        assert actual_values == expected_values
+
 
 # =============================================================================
 # Tests for inject_layering
@@ -309,6 +321,17 @@ class TestInjectLayering:
         G, crime = inject_layering(small_graph, config, seed=42)
         
         assert validate_no_cycles(G, crime.edges_involved) is True
+
+    def test_seed_does_not_mutate_global_random_state(self, small_graph):
+        """Test that seeded layering injection uses an isolated RNG."""
+        random.seed(98765)
+        expected_rng = random.Random(98765)
+        expected_values = [expected_rng.random() for _ in range(3)]
+
+        inject_layering(small_graph, seed=42)
+
+        actual_values = [random.random() for _ in range(3)]
+        assert actual_values == expected_values
     
     def test_amounts_decay(self, small_graph):
         """Test that amounts decay along the chain."""

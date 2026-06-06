@@ -35,32 +35,32 @@ def create_transaction_seed(num_samples: int = 1000, seed: int = 42) -> pd.DataF
     Returns:
         DataFrame with correlated transaction features
     """
-    np.random.seed(seed)
+    rng = np.random.RandomState(seed)
     
     # Generate risk scores (beta distribution for realistic skew)
-    risk_scores = np.random.beta(2, 5, num_samples)
+    risk_scores = rng.beta(2, 5, num_samples)
     
     # Base amounts follow log-normal (realistic for financial data)
-    base_amounts = np.random.lognormal(mean=8.0, sigma=1.5, size=num_samples)
+    base_amounts = rng.lognormal(mean=8.0, sigma=1.5, size=num_samples)
     
     # Apply risk multiplier (high risk = larger amounts)
     risk_multiplier = 1 + (risk_scores * 3)  # 1x to 4x multiplier
     amounts = base_amounts * risk_multiplier
     
     # International transactions are 2x larger on average
-    is_international = np.random.choice([False, True], num_samples, p=[0.7, 0.3])
+    is_international = rng.choice([False, True], num_samples, p=[0.7, 0.3])
     amounts = amounts * (1 + is_international.astype(int))
     
     # Transaction types aligned with existing schema
     # ['wire', 'ach', 'cash', 'internal'] from graph_generator.py
-    transaction_types = np.random.choice(
+    transaction_types = rng.choice(
         ['wire', 'ach', 'cash', 'internal'],
         num_samples,
         p=[0.3, 0.4, 0.1, 0.2]
     )
     
     # Transaction frequency correlates with amount (log relationship)
-    frequency = np.log1p(amounts) * np.random.uniform(0.5, 1.5, num_samples)
+    frequency = np.log1p(amounts) * rng.uniform(0.5, 1.5, num_samples)
     
     df = pd.DataFrame({
         'amount': np.round(amounts, 2),
@@ -90,10 +90,10 @@ def create_entity_seed(num_samples: int = 500, seed: int = 42) -> pd.DataFrame:
     Returns:
         DataFrame with correlated entity features
     """
-    np.random.seed(seed)
+    rng = np.random.RandomState(seed)
     
     # Entity type distribution
-    entity_types = np.random.choice(
+    entity_types = rng.choice(
         ['person', 'company', 'bank'],
         num_samples,
         p=[0.7, 0.25, 0.05]
@@ -102,11 +102,11 @@ def create_entity_seed(num_samples: int = 500, seed: int = 42) -> pd.DataFrame:
     # Risk scores (banks are lower risk)
     risk_scores = np.where(
         entity_types == 'bank',
-        np.random.beta(1, 10, num_samples),  # Low risk
+        rng.beta(1, 10, num_samples),  # Low risk
         np.where(
             entity_types == 'company',
-            np.random.beta(2, 5, num_samples),  # Medium risk
-            np.random.beta(3, 3, num_samples)   # Higher risk for persons
+            rng.beta(2, 5, num_samples),  # Medium risk
+            rng.beta(3, 3, num_samples)   # Higher risk for persons
         )
     )
     
@@ -114,11 +114,11 @@ def create_entity_seed(num_samples: int = 500, seed: int = 42) -> pd.DataFrame:
     verification_status = np.where(
         entity_types == 'bank',
         'verified',
-        np.random.choice(['verified', 'pending', 'failed'], num_samples, p=[0.85, 0.10, 0.05])
+        rng.choice(['verified', 'pending', 'failed'], num_samples, p=[0.85, 0.10, 0.05])
     )
     
     # Transaction volume (companies > persons)
-    base_volume = np.random.lognormal(mean=3.0, sigma=1.0, size=num_samples)
+    base_volume = rng.lognormal(mean=3.0, sigma=1.0, size=num_samples)
     volume_multiplier = np.where(
         entity_types == 'company', 3.0,
         np.where(entity_types == 'bank', 10.0, 1.0)

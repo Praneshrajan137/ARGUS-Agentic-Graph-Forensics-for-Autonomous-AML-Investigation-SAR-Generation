@@ -101,11 +101,10 @@ def inject_structuring(
     if config is None:
         config = StructuringConfig()
     
-    if seed is not None:
-        random.seed(seed)
-        Faker.seed(seed)
-    
+    rng = random.Random(seed)
     fake = Faker()
+    if seed is not None:
+        fake.seed_instance(seed)
     difficulty = config.difficulty
     
     # Get the maximum node ID to create new unique nodes
@@ -116,7 +115,7 @@ def inject_structuring(
         mule_id = config.mule_node
     else:
         # Select a random existing node as the mule
-        mule_id = random.choice(list(G.nodes()))
+        mule_id = rng.choice(list(G.nodes()))
     
     # DIFFICULTY-BASED TIME SPREADING
     if difficulty <= 3:
@@ -163,21 +162,21 @@ def inject_structuring(
             address=fake.address().replace('\n', ', '),
             swift=fake.swift(),
             country=fake.country_code(),
-            risk_score=round(random.uniform(0.3, 0.7), 2),
+            risk_score=round(rng.uniform(0.3, 0.7), 2),
             verification_status='verified'
         )
         source_nodes.append(source_id)
         
         # Generate amount with difficulty-based variance (Decimal)
-        amount = Decimal(str(round(random.uniform(float(min_amt), float(max_amt)), 2)))
+        amount = Decimal(str(round(rng.uniform(float(min_amt), float(max_amt)), 2)))
         amounts.append(amount)
         
         # Generate timestamp with difficulty-based spreading
-        hours_offset = random.uniform(0, effective_time_window)
+        hours_offset = rng.uniform(0, effective_time_window)
         
         # Expert mode: Add random "quiet periods" (long gaps)
         if difficulty >= 9 and i % 5 == 0:
-            hours_offset += random.uniform(100, 500)
+            hours_offset += rng.uniform(100, 500)
         
         timestamp = base_time + timedelta(hours=hours_offset)
         
@@ -185,7 +184,7 @@ def inject_structuring(
         G.add_edge(
             source_id,
             mule_id,
-            transaction_id=f"txn_{random.getrandbits(32):08x}",
+            transaction_id=f"txn_{rng.getrandbits(32):08x}",
             amount=amount,
             currency='USD',
             timestamp=timestamp,
@@ -198,18 +197,18 @@ def inject_structuring(
         # EXPERT MODE: Add decoy legitimate transactions
         if difficulty >= 8:
             # Add 2-4 legitimate transactions per smurf
-            num_decoys = random.randint(2, 4)
+            num_decoys = rng.randint(2, 4)
             existing_nodes = list(G.nodes())
             for _ in range(num_decoys):
-                decoy_target = random.choice(existing_nodes)
+                decoy_target = rng.choice(existing_nodes)
                 if decoy_target != mule_id and decoy_target != source_id:
                     G.add_edge(
                         source_id,
                         decoy_target,
-                        transaction_id=f"txn_{random.getrandbits(32):08x}",
-                        amount=Decimal(str(round(random.uniform(50, 500), 2))),
+                        transaction_id=f"txn_{rng.getrandbits(32):08x}",
+                        amount=Decimal(str(round(rng.uniform(50, 500), 2))),
                         currency='USD',
-                        timestamp=timestamp + timedelta(hours=random.uniform(-24, 24)),
+                        timestamp=timestamp + timedelta(hours=rng.uniform(-24, 24)),
                         transaction_type='ach',
                         label='legitimate',
                         memo=fake.sentence(nb_words=3)
@@ -307,11 +306,10 @@ def inject_layering(
     if config is None:
         config = LayeringConfig()
     
-    if seed is not None:
-        random.seed(seed)
-        Faker.seed(seed)
-    
+    rng = random.Random(seed)
     fake = Faker()
+    if seed is not None:
+        fake.seed_instance(seed)
     difficulty = config.difficulty
     
     # DIFFICULTY-BASED CHAIN LENGTH
@@ -323,10 +321,10 @@ def inject_layering(
         effective_chain_length = config.chain_length
     elif difficulty <= 8:
         # Hard: Longer chain
-        effective_chain_length = random.randint(8, 10)
+        effective_chain_length = rng.randint(8, 10)
     else:
         # Expert: Very long chain
-        effective_chain_length = random.randint(15, 20)
+        effective_chain_length = rng.randint(15, 20)
     
     # DIFFICULTY-BASED DECAY RATES (all Decimal)
     if difficulty <= 3:
@@ -351,10 +349,10 @@ def inject_layering(
         hop_interval_minutes = 30
     elif difficulty <= 8:
         # Hard: Hours between hops
-        hop_interval_minutes = random.randint(60, 240)
+        hop_interval_minutes = rng.randint(60, 240)
     else:
         # Expert: Days between hops
-        hop_interval_minutes = random.randint(720, 2880)  # 12-48 hours
+        hop_interval_minutes = rng.randint(720, 2880)  # 12-48 hours
     
     # Get the maximum node ID to create new unique nodes
     max_node = max(G.nodes()) if G.nodes() else 0
@@ -362,11 +360,11 @@ def inject_layering(
     
     # Select source and destination nodes
     if source_node is None:
-        source_node = random.choice(existing_nodes)
+        source_node = rng.choice(existing_nodes)
     if dest_node is None:
         # Ensure dest is different from source
         available_nodes = [n for n in existing_nodes if n != source_node]
-        dest_node = random.choice(available_nodes) if available_nodes else source_node
+        dest_node = rng.choice(available_nodes) if available_nodes else source_node
     
     # Build chain: source -> intermediate_1 -> ... -> intermediate_n -> dest
     chain_nodes = [source_node]
@@ -383,24 +381,24 @@ def inject_layering(
             address=fake.address().replace('\n', ', '),
             swift=fake.swift(),
             country=fake.country_code(),
-            risk_score=round(random.uniform(0.4, 0.8), 2),
+            risk_score=round(rng.uniform(0.4, 0.8), 2),
             verification_status='verified'
         )
         chain_nodes.append(new_node)
         
         # EXPERT MODE: Add decoy legitimate transactions
         if difficulty >= 8:
-            num_decoys = random.randint(1, 3)
+            num_decoys = rng.randint(1, 3)
             for _ in range(num_decoys):
-                decoy_target = random.choice(existing_nodes)
+                decoy_target = rng.choice(existing_nodes)
                 if decoy_target != new_node:
                     G.add_edge(
                         new_node,
                         decoy_target,
-                        transaction_id=f"txn_{random.getrandbits(32):08x}",
-                        amount=Decimal(str(round(random.uniform(100, 5000), 2))),
+                        transaction_id=f"txn_{rng.getrandbits(32):08x}",
+                        amount=Decimal(str(round(rng.uniform(100, 5000), 2))),
                         currency='USD',
-                        timestamp=datetime.now() + timedelta(hours=random.uniform(-24, 24)),
+                        timestamp=datetime.now() + timedelta(hours=rng.uniform(-24, 24)),
                         transaction_type='ach',
                         label='legitimate',
                         memo=fake.sentence(nb_words=3)
@@ -421,7 +419,7 @@ def inject_layering(
         tgt = chain_nodes[i + 1]
 
         # Apply decay (convert through float for random, back to Decimal)
-        decay = Decimal(str(round(random.uniform(float(min_decay), float(max_decay)), 6)))
+        decay = Decimal(str(round(rng.uniform(float(min_decay), float(max_decay)), 6)))
         decays.append(decay)
 
         if i > 0:  # Don't decay the first transfer
@@ -434,7 +432,7 @@ def inject_layering(
         # Expert mode: Add occasional long gaps
         interval = hop_interval_minutes
         if difficulty >= 9 and i % 4 == 0:
-            interval += random.randint(1440, 4320)  # Add 1-3 days gap
+            interval += rng.randint(1440, 4320)  # Add 1-3 days gap
 
         timestamp = base_time + timedelta(minutes=interval * i)
 
@@ -442,7 +440,7 @@ def inject_layering(
         G.add_edge(
             src,
             tgt,
-            transaction_id=f"txn_{random.getrandbits(32):08x}",
+            transaction_id=f"txn_{rng.getrandbits(32):08x}",
             amount=rounded_amount,
             currency='USD',
             timestamp=timestamp,

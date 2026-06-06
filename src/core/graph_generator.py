@@ -15,7 +15,7 @@ v7.0: Initial implementation with locale-aligned generation.
 """
 
 import networkx as nx
-from typing import Optional, List, Union
+from typing import Iterator, List, MutableMapping, Optional, Union
 from decimal import Decimal
 import random
 import json
@@ -24,7 +24,6 @@ import warnings
 from pathlib import Path
 from datetime import datetime, timedelta
 from faker import Faker
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ def generate_scale_free_graph(
     beta: float = 0.54,
     gamma: float = 0.05,
     seed: Optional[int] = None
-) -> nx.DiGraph:
+) -> nx.MultiDiGraph:
     """
     Generate a scale-free directed graph representing a financial network.
     
@@ -109,7 +108,7 @@ def generate_scale_free_graph(
         seed: Random seed for reproducibility
     
     Returns:
-        NetworkX DiGraph representing the financial network
+        NetworkX MultiDiGraph representing the financial network
     
     Raises:
         ValueError: If alpha + beta + gamma != 1.0
@@ -118,21 +117,30 @@ def generate_scale_free_graph(
     if abs(alpha + beta + gamma - 1.0) > 1e-9:
         raise ValueError(f"alpha + beta + gamma must equal 1.0, got {alpha + beta + gamma}")
     
-    if seed is not None:
-        random.seed(seed)
-    
     # Generate scale-free graph
     G = nx.scale_free_graph(n=n_nodes, alpha=alpha, beta=beta, gamma=gamma, seed=seed)
     
     return G
 
 
+def _iter_edge_data(
+    G: nx.DiGraph | nx.MultiDiGraph,
+) -> Iterator[MutableMapping[str, object]]:
+    """Yield mutable edge attribute mappings for DiGraph and MultiDiGraph."""
+    if isinstance(G, nx.MultiDiGraph):
+        for _, _, _, data in G.edges(keys=True, data=True):
+            yield data
+    else:
+        for _, _, data in G.edges(data=True):
+            yield data
+
+
 def add_entity_attributes(
-    G: nx.DiGraph, 
+    G: nx.DiGraph | nx.MultiDiGraph,
     faker_instance=None,  # DEPRECATED - ignored for locale safety
     locales: Optional[List[str]] = None,  # DEPRECATED - ignored for locale safety
     seed: Optional[int] = None
-) -> nx.DiGraph:
+) -> nx.DiGraph | nx.MultiDiGraph:
     """
     Add entity attributes with LOCALE-ALIGNED generation.
     
@@ -140,7 +148,7 @@ def add_entity_attributes(
     Faker to ensure SWIFT codes and IBANs match the jurisdiction.
     
     Args:
-        G: NetworkX DiGraph
+        G: NetworkX DiGraph or MultiDiGraph
         faker_instance: DEPRECATED (ignored for locale safety)
         locales: DEPRECATED (ignored for locale safety)
         seed: Random seed for reproducibility
@@ -148,22 +156,29 @@ def add_entity_attributes(
     Returns:
         Graph with locale-consistent entity attributes
     """
-    if seed is not None:
-        random.seed(seed)
-        Faker.seed(seed)
-    
+    rng = random.Random(seed)
+    local_fakers: dict[str, Faker] = {}
+
     entity_types = ['person', 'company', 'bank']
     entity_weights = [0.7, 0.25, 0.05]
     
     for node in G.nodes():
         # Step 1: Select country FIRST
-        country = random.choice(SUPPORTED_COUNTRIES)
+        country = rng.choice(SUPPORTED_COUNTRIES)
         
         # Step 2: Get locale-locked Faker for that country
-        fake = get_localized_faker(country)
+        if seed is None:
+            fake = get_localized_faker(country)
+        else:
+            locale = COUNTRY_TO_LOCALE.get(country, 'en_US')
+            if locale not in local_fakers:
+                fake = Faker(locale)
+                fake.seed_instance(seed + sorted(COUNTRY_TO_LOCALE.values()).index(locale))
+                local_fakers[locale] = fake
+            fake = local_fakers[locale]
         
         # Step 3: Generate all attributes using THIS locale
-        entity_type = random.choices(entity_types, weights=entity_weights)[0]
+        entity_type = rng.choices(entity_types, weights=entity_weights)[0]
         G.nodes[node]['entity_type'] = entity_type
         G.nodes[node]['country'] = country  # Set BEFORE other attributes
         
@@ -191,9 +206,9 @@ def add_entity_attributes(
             G.nodes[node]['iban'] = fake.iban()
         except AttributeError:
             # Fallback if locale doesn't support IBAN
-            G.nodes[node]['iban'] = f"{country}{random.randint(10000000, 99999999)}"
+            G.nodes[node]['iban'] = f"{country}{rng.randint(10000000, 99999999)}"
         
-        G.nodes[node]['risk_score'] = round(random.uniform(0, 1), 2)
+        G.nodes[node]['risk_score'] = round(rng.uniform(0, 1), 2)
         G.nodes[node]['verification_status'] = 'verified'
     
     logger.info(f"Locale-aligned entities: {G.number_of_nodes()} nodes across {len(SUPPORTED_COUNTRIES)} countries")
@@ -201,11 +216,11 @@ def add_entity_attributes(
 
 
 def add_transaction_attributes(
-    G: nx.DiGraph,
+    G: nx.DiGraph | nx.MultiDiGraph,
     seed: Optional[int] = None,
     base_time: Optional[datetime] = None,
     use_sdv: bool = True
-) -> nx.DiGraph:
+) -> nx.DiGraph | nx.MultiDiGraph:
     """
     Add transaction attributes to graph edges using SDV Gaussian Copula.
     
@@ -226,10 +241,6 @@ def add_transaction_attributes(
     Returns:
         Graph with transaction attributes added to edges
     """
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-    
     if base_time is None:
         base_time = datetime.now()
     
@@ -243,11 +254,11 @@ def add_transaction_attributes(
 
 
 def _add_transaction_attributes_sdv(
-    G: nx.DiGraph,
+    G: nx.DiGraph | nx.MultiDiGraph,
     num_edges: int,
     base_time: datetime,
     seed: Optional[int] = None
-) -> nx.DiGraph:
+) -> nx.DiGraph | nx.MultiDiGraph:
     """
     Add transaction attributes using SDV Gaussian Copula synthesizer.
     
@@ -283,8 +294,6 @@ def _add_transaction_attributes_sdv(
     
     # Use seed to deterministically shuffle and select
     rng = random.Random(seed)
-    _np_rng = np.random.RandomState(seed)  # noqa: F841  reserved for future SDV seeding
-    
     # Shuffle the pool using the seed
     indices = list(range(len(synthetic_pool)))
     rng.shuffle(indices)
@@ -297,53 +306,31 @@ def _add_transaction_attributes_sdv(
     tx_data = synthetic_tx.to_dict('records')
     
     # Assign to edges
-    edge_idx = 0
-    if isinstance(G, nx.MultiDiGraph):
-        for u, v, key in G.edges(keys=True):
-            tx = tx_data[edge_idx]
-            
-            # Use seeded random hex instead of uuid.uuid4() for reproducibility
-            G.edges[u, v, key]['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
-            # Clamp amount to valid range [100, 50000] -- Decimal(str()) for safety
-            raw_amount = max(100.0, min(float(tx['amount']), 50000.0))
-            G.edges[u, v, key]['amount'] = Decimal(str(round(raw_amount, 2)))
-            G.edges[u, v, key]['risk_score'] = float(tx['risk_score'])
-            G.edges[u, v, key]['is_international'] = bool(tx['is_international'])
-            G.edges[u, v, key]['currency'] = 'USD'
-            G.edges[u, v, key]['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
-            G.edges[u, v, key]['transaction_type'] = str(tx['transaction_type'])
-            G.edges[u, v, key]['label'] = 'legitimate'
-            G.edges[u, v, key]['memo'] = None
+    for edge_idx, data in enumerate(_iter_edge_data(G)):
+        tx = tx_data[edge_idx]
 
-            edge_idx += 1
-    else:
-        for u, v in G.edges():
-            tx = tx_data[edge_idx]
-
-            # Use seeded random hex instead of uuid.uuid4() for reproducibility
-            G.edges[u, v]['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
-            # Clamp amount to valid range [100, 50000] -- Decimal(str()) for safety
-            raw_amount = max(100.0, min(float(tx['amount']), 50000.0))
-            G.edges[u, v]['amount'] = Decimal(str(round(raw_amount, 2)))
-            G.edges[u, v]['risk_score'] = float(tx['risk_score'])
-            G.edges[u, v]['is_international'] = bool(tx['is_international'])
-            G.edges[u, v]['currency'] = 'USD'
-            G.edges[u, v]['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
-            G.edges[u, v]['transaction_type'] = str(tx['transaction_type'])
-            G.edges[u, v]['label'] = 'legitimate'
-            G.edges[u, v]['memo'] = None
-
-            edge_idx += 1
+        # Use seeded random hex instead of uuid.uuid4() for reproducibility
+        data['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
+        # Clamp amount to valid range [100, 50000] -- Decimal(str()) for safety
+        raw_amount = max(100.0, min(float(tx['amount']), 50000.0))
+        data['amount'] = Decimal(str(round(raw_amount, 2)))
+        data['risk_score'] = float(tx['risk_score'])
+        data['is_international'] = bool(tx['is_international'])
+        data['currency'] = 'USD'
+        data['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
+        data['transaction_type'] = str(tx['transaction_type'])
+        data['label'] = 'legitimate'
+        data['memo'] = None
     
     logger.info(f"SDV transaction attributes assigned to {num_edges} edges")
     return G
 
 
 def _add_transaction_attributes_random(
-    G: nx.DiGraph,
+    G: nx.DiGraph | nx.MultiDiGraph,
     base_time: datetime,
     seed: Optional[int] = None
-) -> nx.DiGraph:
+) -> nx.DiGraph | nx.MultiDiGraph:
     """
     Add transaction attributes using random generation (fallback method).
     
@@ -361,30 +348,19 @@ def _add_transaction_attributes_random(
     # Create seeded RNG for reproducibility
     rng = random.Random(seed)
     
-    # Handle both DiGraph and MultiDiGraph
-    if isinstance(G, nx.MultiDiGraph):
-        for u, v, key in G.edges(keys=True):
-            G.edges[u, v, key]['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
-            G.edges[u, v, key]['amount'] = Decimal(str(round(rng.uniform(100, 50000), 2)))
-            G.edges[u, v, key]['currency'] = 'USD'
-            G.edges[u, v, key]['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
-            G.edges[u, v, key]['transaction_type'] = rng.choice(transaction_types)
-            G.edges[u, v, key]['label'] = 'legitimate'
-            G.edges[u, v, key]['memo'] = None
-    else:
-        for u, v in G.edges():
-            G.edges[u, v]['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
-            G.edges[u, v]['amount'] = Decimal(str(round(rng.uniform(100, 50000), 2)))
-            G.edges[u, v]['currency'] = 'USD'
-            G.edges[u, v]['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
-            G.edges[u, v]['transaction_type'] = rng.choice(transaction_types)
-            G.edges[u, v]['label'] = 'legitimate'
-            G.edges[u, v]['memo'] = None
+    for data in _iter_edge_data(G):
+        data['transaction_id'] = f"txn_{rng.getrandbits(32):08x}"
+        data['amount'] = Decimal(str(round(rng.uniform(100, 50000), 2)))
+        data['currency'] = 'USD'
+        data['timestamp'] = base_time - timedelta(days=rng.randint(0, 365))
+        data['transaction_type'] = rng.choice(transaction_types)
+        data['label'] = 'legitimate'
+        data['memo'] = None
     
     return G
 
 
-def save_graph(graph: nx.DiGraph, filepath: Union[str, 'Path']) -> None:
+def save_graph(graph: nx.DiGraph | nx.MultiDiGraph, filepath: Union[str, 'Path']) -> None:
     """
     Save graph to JSON file (node-link format).
 
@@ -393,16 +369,17 @@ def save_graph(graph: nx.DiGraph, filepath: Union[str, 'Path']) -> None:
         filepath: Output file path (.json extension recommended)
     """
     logger.info(f"Saving graph to {filepath}")
-    data = nx.node_link_data(graph)
+    data = nx.node_link_data(graph, edges="links")
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, default=str, ensure_ascii=False)
     logger.info(f"Graph saved successfully ({graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges)")
 
 
-def load_graph(filepath: Union[str, 'Path']) -> nx.DiGraph:
+def load_graph(filepath: Union[str, 'Path']) -> nx.DiGraph | nx.MultiDiGraph:
     """
     Load graph from JSON file (node-link format).
     Falls back to pickle for legacy .pkl files with a security warning.
+    Only load legacy pickle files that were produced by trusted ARGUS runs.
 
     Args:
         filepath: Input file path
@@ -425,7 +402,7 @@ def load_graph(filepath: Union[str, 'Path']) -> nx.DiGraph:
     else:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        graph = nx.node_link_graph(data)
+        graph = nx.node_link_graph(data, edges="links")
     logger.info(f"Graph loaded successfully ({graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges)")
     return graph
 

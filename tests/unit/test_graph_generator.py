@@ -12,6 +12,7 @@ Tests cover:
 
 import pytest
 import networkx as nx
+import random
 import time
 
 from src.core.graph_generator import (
@@ -28,14 +29,23 @@ from src.core.graph_generator import (
 class TestGenerateScaleFreeGraph:
     """Test suite for generate_scale_free_graph function."""
     
-    def test_returns_digraph(self):
-        """Test that function returns a NetworkX DiGraph."""
+    def test_returns_multidigraph(self):
+        """Test that function returns NetworkX's scale-free MultiDiGraph."""
         G = generate_scale_free_graph(n_nodes=50)
         
-        # Note: scale_free_graph returns MultiDiGraph, 
-        # but we should verify it's at least a directed graph
-        assert isinstance(G, (nx.DiGraph, nx.MultiDiGraph))
+        assert isinstance(G, nx.MultiDiGraph)
         assert G.is_directed()
+
+    def test_seed_does_not_mutate_global_random_state(self):
+        """Test that seeded graph generation does not reseed global random."""
+        random.seed(98765)
+        expected_rng = random.Random(98765)
+        expected_values = [expected_rng.random() for _ in range(3)]
+
+        generate_scale_free_graph(n_nodes=50, seed=42)
+
+        actual_values = [random.random() for _ in range(3)]
+        assert actual_values == expected_values
     
     def test_node_count_exact(self):
         """Test that graph has exact number of nodes requested."""
@@ -201,6 +211,18 @@ class TestAddEntityAttributes:
         
         for node in G1.nodes():
             assert G1.nodes[node]['name'] == G2.nodes[node]['name']
+
+    def test_seed_does_not_mutate_global_random_state(self):
+        """Test that seeded entity generation uses an isolated RNG."""
+        G = generate_scale_free_graph(n_nodes=10, seed=42)
+        random.seed(98765)
+        expected_rng = random.Random(98765)
+        expected_values = [expected_rng.random() for _ in range(3)]
+
+        add_entity_attributes(G, seed=42)
+
+        actual_values = [random.random() for _ in range(3)]
+        assert actual_values == expected_values
     
     def test_locale_support(self):
         """Test that locales parameter is accepted."""
@@ -290,6 +312,34 @@ class TestAddTransactionAttributes:
             amounts2 = [data['amount'] for u, v, data in G2.edges(data=True)]
         
         assert amounts1 == amounts2
+
+    def test_digraph_and_multidigraph_edges_get_same_attribute_schema(self):
+        """Test transaction attributes are assigned through one edge-data path."""
+        multidigraph = generate_scale_free_graph(n_nodes=10, seed=42)
+        digraph = nx.DiGraph()
+        digraph.add_edge("a", "b")
+        digraph.add_edge("b", "c")
+
+        add_transaction_attributes(multidigraph, seed=42, use_sdv=False)
+        add_transaction_attributes(digraph, seed=42, use_sdv=False)
+
+        required_attrs = {'amount', 'timestamp', 'transaction_type', 'transaction_id', 'label'}
+        for _, _, _, data in multidigraph.edges(keys=True, data=True):
+            assert required_attrs.issubset(data.keys())
+        for _, _, data in digraph.edges(data=True):
+            assert required_attrs.issubset(data.keys())
+
+    def test_seed_does_not_mutate_global_random_state(self):
+        """Test that seeded transaction generation uses an isolated RNG."""
+        G = generate_scale_free_graph(n_nodes=10, seed=42)
+        random.seed(98765)
+        expected_rng = random.Random(98765)
+        expected_values = [expected_rng.random() for _ in range(3)]
+
+        add_transaction_attributes(G, seed=42, use_sdv=False)
+
+        actual_values = [random.random() for _ in range(3)]
+        assert actual_values == expected_values
 
 
 # =============================================================================
