@@ -49,11 +49,10 @@ class EvidenceGenerator:
     
     def __init__(self, seed: Optional[int] = None):
         """Initialize with optional seed for reproducibility."""
-        if seed is not None:
-            random.seed(seed)
-            Faker.seed(seed)
-        
+        self.rng = random.Random(seed)
         self.fake = Faker()
+        if seed is not None:
+            self.fake.seed_instance(seed)
     
     def generate_sar_narrative(
         self,
@@ -83,7 +82,7 @@ class EvidenceGenerator:
             Dictionary with SAR document structure
         """
         amount_str = _fmt_amount(total_amount, currency)
-        file_number = f"SAR-{random.randint(100000, 999999)}"
+        file_number = f"SAR-{self.rng.randint(100000, 999999)}"
 
         if currency == "INR":
             regulator = "FIU-IND"
@@ -233,7 +232,7 @@ Please prioritize this investigation. Account details:
 Investigation required within 24 hours per BSA requirements."""
         ]
         
-        email_body = random.choice(email_templates).strip()
+        email_body = self.rng.choice(email_templates).strip()
         
         return {
             "document_type": "email",
@@ -300,7 +299,7 @@ Seemed routine to me.""",
 Account: {subject_id}
 Amount: {actual_str}
 Date: {datetime.now().strftime('%Y-%m-%d')}
-Confirmation: WT-{random.randint(100000, 999999)}"""
+Confirmation: WT-{self.rng.randint(100000, 999999)}"""
 
         receipt = {
             "document_type": "receipt",
@@ -361,7 +360,7 @@ Confirmation: WT-{random.randint(100000, 999999)}"""
         
         # Generate remaining crime documents if needed
         for i in range(crime_documents - len(crime_entity_ids)):
-            entity_id = random.choice(crime_entity_ids)
+            entity_id = self.rng.choice(crime_entity_ids)
             doc = self.generate_internal_email(
                 subject_id=entity_id,
                 subject_name=self.fake.name(),
@@ -385,7 +384,7 @@ Standard documentation collected. No issues noted.""",
             documents.append(doc)
         
         # Shuffle so clues aren't at the top
-        random.shuffle(documents)
+        self.rng.shuffle(documents)
         
         logger.info(f"Generated needle-in-haystack corpus: {total_documents} docs, {crime_documents} clues")
         return documents

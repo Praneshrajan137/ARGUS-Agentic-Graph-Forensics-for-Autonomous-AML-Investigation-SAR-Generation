@@ -24,7 +24,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 SKILLS_PATH = PROJECT_ROOT / ".claude" / "skills" / "financial-crime" / "scripts"
 sys.path.insert(0, str(SKILLS_PATH))
 
-from src.core.graph_generator import save_graph, load_graph
+from src.core.graph_generator import save_graph, load_graph  # noqa: E402
 
 
 # =============================================================================
