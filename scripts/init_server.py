@@ -24,7 +24,6 @@ import argparse
 import logging
 import os
 import sys
-import random
 import numpy as np
 from pathlib import Path
 
@@ -40,26 +39,34 @@ logger = logging.getLogger(__name__)
 
 
 def set_all_seeds(seed: int) -> None:
-    """
-    Set all random seeds for reproducibility.
-    
+    """Set deterministic seeds for reproducibility WITHOUT mutating global random state.
+
+    Uses PYTHONHASHSEED + Faker class-level seed. NumPy global seed is set only
+    for SDV compatibility (SDV uses numpy.random internally). The Python `random`
+    module global state is NOT touched — all ARGUS code uses `random.Random(seed)`
+    instances for isolation.
+
     Args:
         seed: The seed value to use
     """
-    random.seed(seed)
+    # NOTE: We intentionally do NOT call random.seed(seed) here.
+    # All production code uses random.Random(seed) instances for thread-safety
+    # and isolation. See R-03 in the codebase analysis.
+
+    # NumPy global seed required by SDV internals
     np.random.seed(seed)
-    
-    # Set Faker seed
+
+    # Set Faker class-level seed (does not touch Python random module)
     try:
         from faker import Faker
         Faker.seed(seed)
     except ImportError:
         pass
-    
+
     # Set environment variable for any subprocess
     os.environ['PYTHONHASHSEED'] = str(seed)
-    
-    logger.info(f"All random seeds set to: {seed}")
+
+    logger.info(f"All random seeds set to: {seed} (global random.seed NOT mutated)")
 
 
 def generate_and_load_data(
@@ -109,10 +116,10 @@ def generate_and_load_data(
     logger.info("Step 1: Generating scale-free baseline economy...")
     G = generate_scale_free_graph(n_nodes=1000, seed=seed)
     
-    # Convert MultiDiGraph to DiGraph if needed
-    if isinstance(G, nx.MultiDiGraph):
-        G = nx.DiGraph(G)
-        logger.info("  - Converted MultiDiGraph to DiGraph")
+    # Rule 2: ALWAYS use MultiDiGraph. scale_free_graph returns MultiDiGraph natively.
+    if not isinstance(G, nx.MultiDiGraph):
+        G = nx.MultiDiGraph(G)
+        logger.info("  - Converted to MultiDiGraph (Rule 2: NEVER DiGraph)")
     
     logger.info(f"  - Generated {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     

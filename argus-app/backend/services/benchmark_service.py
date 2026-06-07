@@ -5,7 +5,6 @@ Designed to run in a background thread with progress updates via AppState.
 """
 import logging
 import time
-import uuid
 from datetime import datetime
 from typing import Any
 
@@ -132,12 +131,14 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
         "started_at": started_at,
         "completed_at": None,
     }
-    state.benchmarks[benchmark_id] = benchmark
+    with state._lock:
+        state.benchmarks[benchmark_id] = benchmark
 
     try:
         # Step 1: Generate world if requested
         if config.get("generate", False):
-            benchmark["current_node"] = "generating..."
+            with state._lock:
+                benchmark["current_node"] = "generating..."
             generate_world(
                 seed=config.get("seed", 42),
                 difficulty=config.get("difficulty", 5),
@@ -145,13 +146,15 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
             )
 
         if state.graph is None:
-            benchmark["status"] = "FAILED"
-            benchmark["completed_at"] = datetime.now().isoformat()
+            with state._lock:
+                benchmark["status"] = "FAILED"
+                benchmark["completed_at"] = datetime.now().isoformat()
             return
 
         # Step 2: Build target node list (ALL nodes)
         all_node_ids = sorted(str(n) for n in state.graph.nodes())
-        benchmark["total_count"] = len(all_node_ids)
+        with state._lock:
+            benchmark["total_count"] = len(all_node_ids)
 
         # Step 3: Build expected typology map
         typology_map = _build_expected_typology_map(state.ground_truth)
@@ -212,19 +215,21 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
             })
 
             # Update progress
-            benchmark["completed_count"] = idx + 1
-            benchmark["current_node"] = node_id
-            benchmark["progress"] = round(((idx + 1) / len(all_node_ids)) * 100, 1)
-            benchmark["node_results"] = node_results
+            with state._lock:
+                benchmark["completed_count"] = idx + 1
+                benchmark["current_node"] = node_id
+                benchmark["progress"] = round(((idx + 1) / len(all_node_ids)) * 100, 1)
+                benchmark["node_results"] = node_results
 
         # Step 5: Compute aggregate metrics
         total_duration_ms = int((time.time() - t_total_start) * 1000)
         aggregate = _compute_aggregate(node_results, total_duration_ms)
 
-        benchmark["status"] = "COMPLETE"
-        benchmark["aggregate"] = aggregate
-        benchmark["node_results"] = node_results
-        benchmark["completed_at"] = datetime.now().isoformat()
+        with state._lock:
+            benchmark["status"] = "COMPLETE"
+            benchmark["aggregate"] = aggregate
+            benchmark["node_results"] = node_results
+            benchmark["completed_at"] = datetime.now().isoformat()
 
         logger.info(
             "Benchmark %s complete: %d nodes, detection_rate=%.2f%%, FPR=%.2f%%, F1=%.4f",
@@ -236,8 +241,9 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
 
     except Exception as e:
         logger.error("Benchmark %s failed: %s", benchmark_id, e)
-        benchmark["status"] = "FAILED"
-        benchmark["completed_at"] = datetime.now().isoformat()
+        with state._lock:
+            benchmark["status"] = "FAILED"
+            benchmark["completed_at"] = datetime.now().isoformat()
 
 
 def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
@@ -263,12 +269,14 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
         "started_at": started_at,
         "completed_at": None,
     }
-    state.benchmarks[benchmark_id] = benchmark
+    with state._lock:
+        state.benchmarks[benchmark_id] = benchmark
 
     try:
         # Step 1: Generate world if requested
         if config.get("generate", False):
-            benchmark["current_node"] = "generating..."
+            with state._lock:
+                benchmark["current_node"] = "generating..."
             generate_world(
                 seed=config.get("seed", 42),
                 difficulty=config.get("difficulty", 5),
@@ -276,19 +284,22 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
             )
 
         if state.graph is None:
-            benchmark["status"] = "FAILED"
-            benchmark["completed_at"] = datetime.now().isoformat()
+            with state._lock:
+                benchmark["status"] = "FAILED"
+                benchmark["completed_at"] = datetime.now().isoformat()
             return
 
         # Step 2: Load FULL graph into GraphReasoner ONCE
-        benchmark["current_node"] = "loading graph..."
+        with state._lock:
+            benchmark["current_node"] = "loading graph..."
         graph_dict = _networkx_to_reasoner_dict(state.graph, subject_id=None)
         reasoner = GraphReasoner()
         reasoner.load_from_dict(graph_dict)
 
         # Step 3: Build target node list and typology map
         all_node_ids = sorted(str(n) for n in state.graph.nodes())
-        benchmark["total_count"] = len(all_node_ids)
+        with state._lock:
+            benchmark["total_count"] = len(all_node_ids)
         typology_map = _build_expected_typology_map(state.ground_truth)
 
         # Step 4: Determine currency from jurisdiction
@@ -348,19 +359,21 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
             })
 
             # Update progress
-            benchmark["completed_count"] = idx + 1
-            benchmark["current_node"] = node_id
-            benchmark["progress"] = round(((idx + 1) / len(all_node_ids)) * 100, 1)
-            benchmark["node_results"] = node_results
+            with state._lock:
+                benchmark["completed_count"] = idx + 1
+                benchmark["current_node"] = node_id
+                benchmark["progress"] = round(((idx + 1) / len(all_node_ids)) * 100, 1)
+                benchmark["node_results"] = node_results
 
         # Step 6: Compute aggregate metrics
         total_duration_ms = int((time.time() - t_total_start) * 1000)
         aggregate = _compute_aggregate(node_results, total_duration_ms)
 
-        benchmark["status"] = "COMPLETE"
-        benchmark["aggregate"] = aggregate
-        benchmark["node_results"] = node_results
-        benchmark["completed_at"] = datetime.now().isoformat()
+        with state._lock:
+            benchmark["status"] = "COMPLETE"
+            benchmark["aggregate"] = aggregate
+            benchmark["node_results"] = node_results
+            benchmark["completed_at"] = datetime.now().isoformat()
 
         logger.info(
             "Fast benchmark %s complete: %d nodes in %.1fs, detection_rate=%.2f%%, FPR=%.2f%%",
@@ -372,5 +385,6 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
 
     except Exception as e:
         logger.error("Fast benchmark %s failed: %s", benchmark_id, e)
-        benchmark["status"] = "FAILED"
-        benchmark["completed_at"] = datetime.now().isoformat()
+        with state._lock:
+            benchmark["status"] = "FAILED"
+            benchmark["completed_at"] = datetime.now().isoformat()

@@ -2,7 +2,10 @@
 
 Thread-safe for single-process FastAPI with uvicorn.
 Graph is always MultiDiGraph (Rule 2). Node IDs stored as strings (Rule 8).
+
+v9.0: Explicit thread safety via RLock around mutable collections.
 """
+import threading
 import time
 
 import networkx as nx
@@ -19,6 +22,11 @@ class AppState:
     - ground_truth.crimes[].nodes_involved are ALWAYS string IDs
     - evidence_documents is ALWAYS a list of dicts with "content" key
     - investigations is keyed by case_id (string)
+
+    THREAD SAFETY:
+    - All mutations to `investigations` and `benchmarks` MUST hold `_lock`.
+    - Read-only access to `graph` after startup is safe without the lock
+      (graph is write-once during lifespan startup, never mutated after).
     """
     graph: nx.MultiDiGraph | None = None
     ground_truth: dict = field(default_factory=dict)
@@ -31,6 +39,12 @@ class AppState:
     generated_at: str | None = None
     generation_error: str | None = None
     generation_epoch: float = field(default_factory=time.time)
+
+    # Explicit RLock for thread-safe mutation of investigations/benchmarks.
+    # RLock (reentrant) allows the same thread to acquire multiple times
+    # without deadlocking — needed because _update_step is called from
+    # within run_investigation which already holds context.
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
 
 _state = AppState()
