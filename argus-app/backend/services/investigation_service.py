@@ -22,18 +22,20 @@ import networkx as nx
 
 from ..models.state import get_state
 from .tracer_service import (
-    build_workflow, InvestigationState,
-    GraphReasoner, detect_structuring, detect_layering,
-    EvidenceSynthesizer, SARDraft, mechanical_sar_template,
+    InvestigationState,
     # Node functions for step-by-step execution with progress tracking
     receive_case, analyze_graph, detect_typology,
     synthesize_evidence, compute_confidence,
     draft_sar, validate_sar, submit_result,
     should_generate_sar, should_retry,
-    SAR_MAX_RETRY,
 )
 
 logger = logging.getLogger(__name__)
+
+# R-02: Watchdog timeout — if investigation thread runs longer than this,
+# the route layer marks it FAILED so the frontend doesn't poll forever.
+INVESTIGATION_TIMEOUT_SECONDS = 300  # 5 minutes
+
 
 # v5.0 D-48: entity_type remapping (FORGE → TRACER proto values)
 _ENTITY_TYPE_MAP = {"person": "individual", "company": "business"}
@@ -233,7 +235,6 @@ def _reconstruct_steps(result_state: dict) -> list[dict]:
     confidence = result_state.get("confidence_score", 0.0)
     validation = result_state.get("validation_result") or {}
     evidence = result_state.get("evidence_package") or {}
-    sar_draft = result_state.get("sar_draft")
     graph = result_state.get("graph_fragment") or {}
     error = result_state.get("error_message")
 
@@ -333,44 +334,48 @@ def _seed_pending_investigation(case_id: str, subject_id: str, jurisdiction: str
         "steps": steps,
         "error": None,
     }
-    get_state().investigations[case_id] = entry
+    state = get_state()
+    with state._lock:
+        state.investigations[case_id] = entry
     return entry
 
 
 def _update_step(case_id: str, step_name: str, status: str, detail: str = "", duration_ms: int = 0):
     """Update a single step's status in the live investigation entry.
 
+    Thread-safe: acquires AppState._lock before mutating investigation state.
     Also updates the top-level status to IN_PROGRESS while running,
     and marks remaining steps as 'skipped' on failure.
     """
     state = get_state()
-    inv = state.investigations.get(case_id)
-    if inv is None:
-        return
+    with state._lock:
+        inv = state.investigations.get(case_id)
+        if inv is None:
+            return
 
-    # Update the specific step
-    for step in inv["steps"]:
-        if step["name"] == step_name:
-            step["status"] = status
-            step["detail"] = detail
-            if duration_ms:
-                step["duration_ms"] = duration_ms
-            break
-
-    # Update top-level status
-    if status == "running":
-        inv["status"] = "IN_PROGRESS"
-    elif status == "failed":
-        inv["status"] = "FAILED"
-        inv["error"] = detail
-        # Mark all subsequent pending steps as skipped
-        found = False
+        # Update the specific step
         for step in inv["steps"]:
             if step["name"] == step_name:
-                found = True
-                continue
-            if found and step["status"] == "pending":
-                step["status"] = "skipped"
+                step["status"] = status
+                step["detail"] = detail
+                if duration_ms:
+                    step["duration_ms"] = duration_ms
+                break
+
+        # Update top-level status
+        if status == "running":
+            inv["status"] = "IN_PROGRESS"
+        elif status == "failed":
+            inv["status"] = "FAILED"
+            inv["error"] = detail
+            # Mark all subsequent pending steps as skipped
+            found = False
+            for step in inv["steps"]:
+                if step["name"] == step_name:
+                    found = True
+                    continue
+                if found and step["status"] == "pending":
+                    step["status"] = "skipped"
 
 
 def _step_detail_from_state(step_name: str, lg_state: dict) -> str:
@@ -425,7 +430,8 @@ def run_investigation(
 
     if app_state.graph is None:
         _update_step(case_id, "receive", "failed", "No graph loaded")
-        return app_state.investigations[case_id]
+        with app_state._lock:
+            return app_state.investigations[case_id]
 
     # Pre-processing: convert graph + inject evidence
     graph_dict = _networkx_to_reasoner_dict(app_state.graph, subject_id, hop_depth)
@@ -434,7 +440,8 @@ def run_investigation(
         _update_step(case_id, "receive", "complete", f"Case {case_id}")
         _update_step(case_id, "analyze", "failed",
                      f"Subject {subject_id} not found or no transactions within {hop_depth} hops")
-        return app_state.investigations[case_id]
+        with app_state._lock:
+            return app_state.investigations[case_id]
 
     graph_dict = _inject_text_evidence(graph_dict, subject_id)
 
@@ -485,21 +492,24 @@ def run_investigation(
     lg_state = _run_step("receive", receive_case, lg_state)
     if lg_state.get("status") == "FAILED":
         result = _langgraph_state_to_response(lg_state, case_id, str(subject_id), jurisdiction)
-        app_state.investigations[case_id] = result
+        with app_state._lock:
+            app_state.investigations[case_id] = result
         return result
 
     # 2. Analyze
     lg_state = _run_step("analyze", analyze_graph, lg_state)
     if lg_state.get("status") == "FAILED":
         result = _langgraph_state_to_response(lg_state, case_id, str(subject_id), jurisdiction)
-        app_state.investigations[case_id] = result
+        with app_state._lock:
+            app_state.investigations[case_id] = result
         return result
 
     # 3. Detect
     lg_state = _run_step("detect", detect_typology, lg_state)
     if lg_state.get("status") == "FAILED":
         result = _langgraph_state_to_response(lg_state, case_id, str(subject_id), jurisdiction)
-        app_state.investigations[case_id] = result
+        with app_state._lock:
+            app_state.investigations[case_id] = result
         return result
 
     # 4. Synthesize
@@ -529,7 +539,7 @@ def run_investigation(
     result = _langgraph_state_to_response(lg_state, case_id, str(subject_id), jurisdiction)
 
     # Preserve the real per-step timing from our tracked execution
-    result["steps"] = app_state.investigations[case_id]["steps"]
-
-    app_state.investigations[case_id] = result
+    with app_state._lock:
+        result["steps"] = app_state.investigations[case_id]["steps"]
+        app_state.investigations[case_id] = result
     return result

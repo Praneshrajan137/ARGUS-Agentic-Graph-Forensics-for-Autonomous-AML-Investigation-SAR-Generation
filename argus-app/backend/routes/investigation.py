@@ -1,5 +1,6 @@
 """Investigation routes — 4 endpoints for running and querying investigations."""
 import asyncio
+import logging
 import threading
 import time
 import uuid
@@ -10,10 +11,29 @@ from ..models.schemas import (
     InvestigationRequest, InvestigationResponse,
     InvestigationListResponse, PipelineStatusResponse,
 )
-from ..services.investigation_service import run_investigation
+from ..services.investigation_service import run_investigation, INVESTIGATION_TIMEOUT_SECONDS
 from ..services.baseline_service import run_baseline_investigation
 
 router = APIRouter(prefix="/api/investigation", tags=["investigation"])
+logger = logging.getLogger(__name__)
+
+
+def _mark_investigation_failed(case_id: str, detail: str) -> None:
+    state = get_state()
+    with state._lock:
+        inv = state.investigations.get(case_id)
+        if inv is None:
+            return
+        if inv.get("status") not in ("PENDING", "IN_PROGRESS"):
+            return
+        inv["status"] = "FAILED"
+        inv["error"] = detail
+        for step in inv.get("steps", []):
+            if step.get("status") == "running":
+                step["status"] = "failed"
+                step["detail"] = detail
+            elif step.get("status") == "pending":
+                step["status"] = "skipped"
 
 
 @router.post("/investigate", response_model=InvestigationResponse)
@@ -40,24 +60,58 @@ async def create_investigation(request: InvestigationRequest):
     if resolved is None:
         raise HTTPException(status_code=404, detail=f"Subject not found: {subject_id}")
 
+    def _run_investigation_thread():
+        try:
+            run_investigation(
+                case_id=case_id,
+                subject_id=str(resolved),
+                hop_depth=request.hop_depth,
+                jurisdiction=request.jurisdiction,
+            )
+        except Exception as exc:
+            logger.error("[%s] Investigation thread crashed: %s", case_id, exc, exc_info=True)
+            _mark_investigation_failed(case_id, f"Investigation thread crashed: {exc}")
+
     # Fire-and-return: launch investigation in background thread
     thread = threading.Thread(
-        target=run_investigation,
-        kwargs={
-            "case_id": case_id,
-            "subject_id": str(resolved),
-            "hop_depth": request.hop_depth,
-            "jurisdiction": request.jurisdiction,
-        },
+        target=_run_investigation_thread,
         daemon=True,
+        name=f"investigation-{case_id}",
     )
     thread.start()
+
+    # R-02: Watchdog — mark FAILED if thread dies silently or exceeds timeout.
+    def _watchdog(t: threading.Thread, cid: str, timeout: float):
+        t.join(timeout=timeout)
+        with state._lock:
+            inv = state.investigations.get(cid)
+            if inv is None:
+                return
+            if inv.get("status") in ("PENDING", "IN_PROGRESS"):
+                detail = f"Investigation timed out after {int(timeout)}s"
+                inv["status"] = "FAILED"
+                inv["error"] = detail
+                for step in inv.get("steps", []):
+                    if step.get("status") == "running":
+                        step["status"] = "failed"
+                        step["detail"] = detail
+                    elif step.get("status") == "pending":
+                        step["status"] = "skipped"
+
+    watchdog = threading.Thread(
+        target=_watchdog,
+        args=(thread, case_id, float(INVESTIGATION_TIMEOUT_SECONDS)),
+        daemon=True,
+        name=f"watchdog-{case_id}",
+    )
+    watchdog.start()
 
     # Give thread a moment to seed state.investigations[case_id]
     time.sleep(0.05)
 
     # Return the PENDING investigation entry
-    investigation = state.investigations.get(case_id)
+    with state._lock:
+        investigation = state.investigations.get(case_id)
     if investigation is None:
         # Thread hasn't seeded yet — return a minimal PENDING response
         return InvestigationResponse(
@@ -74,7 +128,8 @@ async def create_investigation(request: InvestigationRequest):
 async def list_investigations():
     """Return all completed and in-progress investigations."""
     state = get_state()
-    investigations = list(state.investigations.values())
+    with state._lock:
+        investigations = list(state.investigations.values())
     return InvestigationListResponse(
         investigations=investigations,
         total=len(investigations),
@@ -85,7 +140,8 @@ async def list_investigations():
 async def get_investigation(case_id: str):
     """Return a specific investigation by case_id."""
     state = get_state()
-    investigation = state.investigations.get(case_id)
+    with state._lock:
+        investigation = state.investigations.get(case_id)
     if investigation is None:
         raise HTTPException(status_code=404, detail=f"Investigation not found: {case_id}")
     return investigation
@@ -95,7 +151,8 @@ async def get_investigation(case_id: str):
 async def get_investigation_progress(case_id: str):
     """Return pipeline progress for a specific investigation."""
     state = get_state()
-    investigation = state.investigations.get(case_id)
+    with state._lock:
+        investigation = state.investigations.get(case_id)
     if investigation is None:
         raise HTTPException(status_code=404, detail=f"Investigation not found: {case_id}")
 

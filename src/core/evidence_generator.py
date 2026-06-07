@@ -34,14 +34,17 @@ logger = logging.getLogger(__name__)
 def _fmt_amount(amount: Union[Decimal, float, int], currency: str = "USD") -> str:
     """Format a monetary amount for display in evidence text.
 
-    Accepts Decimal, float, or int. Returns '$1,234.56' for USD,
-    '₹1,23,456.00' for INR (Indian numbering not implemented here,
-    uses standard comma formatting).
+    Stays Decimal-clean: quantizes to 2 decimal places without float conversion.
+    Returns '$1,234.56' for USD, '₹1,234.56' for INR.
     """
-    val = float(amount) if isinstance(amount, Decimal) else amount
+    if not isinstance(amount, Decimal):
+        amount = Decimal(str(amount))
+    # Quantize to 2 decimal places (Decimal-clean, no float precision loss)
+    quantized = amount.quantize(Decimal("0.01"))
+    formatted = f"{quantized:,}"
     if currency == "INR":
-        return f"₹{val:,.2f}"
-    return f"${val:,.2f}"
+        return f"₹{formatted}"
+    return f"${formatted}"
 
 
 class EvidenceGenerator:

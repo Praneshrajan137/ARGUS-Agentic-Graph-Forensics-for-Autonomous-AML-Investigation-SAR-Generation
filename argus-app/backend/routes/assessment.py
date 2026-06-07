@@ -1,7 +1,6 @@
 """Assessment, ground-truth, config, and reset routes."""
 import logging
 from fastapi import APIRouter, HTTPException
-from decimal import Decimal
 
 from ..models.state import get_state, reset_state
 from ..models.schemas import (
@@ -36,9 +35,11 @@ async def assess_investigation(request: AssessmentRequest):
     state = get_state()
     if not state.ground_truth:
         raise HTTPException(status_code=400, detail="No ground truth loaded. Generate first.")
-    if request.case_id not in state.investigations:
+    with state._lock:
+        investigation = state.investigations.get(request.case_id)
+    if investigation is None:
         raise HTTPException(status_code=404, detail=f"Investigation not found: {request.case_id}")
-    if state.investigations[request.case_id].get("status") != "COMPLETE":
+    if investigation.get("status") != "COMPLETE":
         raise HTTPException(status_code=400, detail="Investigation not yet complete")
 
     result = run_assessment(request.case_id)

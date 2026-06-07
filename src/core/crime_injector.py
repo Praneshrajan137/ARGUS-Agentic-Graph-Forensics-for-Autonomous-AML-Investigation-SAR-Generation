@@ -73,11 +73,11 @@ class InjectedCrime:
 
 
 def inject_structuring(
-    G: nx.DiGraph,
+    G: nx.MultiDiGraph,
     config: Optional[StructuringConfig] = None,
     seed: Optional[int] = None,
     generate_evidence: bool = True
-) -> Tuple[nx.DiGraph, InjectedCrime]:
+) -> Tuple[nx.MultiDiGraph, InjectedCrime]:
     """
     Inject structuring (smurfing) crime pattern with difficulty-based obfuscation.
     
@@ -274,13 +274,13 @@ def inject_structuring(
 
 
 def inject_layering(
-    G: nx.DiGraph,
+    G: nx.MultiDiGraph,
     config: Optional[LayeringConfig] = None,
     seed: Optional[int] = None,
     source_node: Optional[int] = None,
     dest_node: Optional[int] = None,
     generate_evidence: bool = True
-) -> Tuple[nx.DiGraph, InjectedCrime]:
+) -> Tuple[nx.MultiDiGraph, InjectedCrime]:
     """
     Inject layering crime pattern with difficulty-based obfuscation.
     
@@ -514,7 +514,7 @@ def inject_layering(
     return G, crime
 
 
-def validate_no_cycles(G: nx.DiGraph, crime_edges: List[Tuple[int, int]]) -> bool:
+def validate_no_cycles(G: nx.MultiDiGraph, crime_edges: List[Tuple[int, int]]) -> bool:
     """
     Validate that injected crime edges don't create cycles.
     
@@ -547,7 +547,7 @@ def validate_no_cycles(G: nx.DiGraph, crime_edges: List[Tuple[int, int]]) -> boo
         return True  # No cycles introduced by injected edges
 
 
-def get_crime_labels(G: nx.DiGraph) -> Dict[Tuple[int, int], str]:
+def get_crime_labels(G: nx.MultiDiGraph) -> Dict[Tuple[int, int], str]:
     """
     Extract crime labels from graph for training data.
     

@@ -16,12 +16,11 @@ from src.config import (
     RUBRIC_WEIGHT_EFFICIENCY,
     SAR_FIVE_WS_PATTERN,
     CTR_THRESHOLD_USD, STRUCTURING_MIN_AMOUNT_USD, STRUCTURING_MAX_AMOUNT_USD,
-    CONFIDENCE_THRESHOLD,
     EFFICIENCY_TIER_EXCELLENT_MAX, EFFICIENCY_TIER_GOOD_MAX, EFFICIENCY_TIER_FAIR_MAX,
 )
 from src.core.result_types import (
     EntityMetrics, HallucinationCheck, FiveWsValidation,
-    TypologyScore, EfficiencyScore, AssessmentResult,
+    TypologyScore, EfficiencyScore,
 )
 
 from ..models.state import get_state
@@ -253,7 +252,8 @@ def run_assessment(case_id: str) -> dict[str, Any]:
     5. Returns a unified assessment dict
     """
     state = get_state()
-    investigation = state.investigations.get(case_id)
+    with state._lock:
+        investigation = state.investigations.get(case_id)
     if investigation is None:
         return {"error": f"Investigation {case_id} not found"}
 
