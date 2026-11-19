@@ -1,10 +1,12 @@
 # ═══════════════════════════════════════════════════════════════════
-# ARGUS Production Workbench — Multi-stage Non-Root Docker Build
+# ARGUS Research & Synthetic Demo Runtime — Multi-stage Non-Root Build
+# Used by render.yaml (Render web service) and synthetic demo deployments.
+# For the isolated PostgreSQL 16 + OIDC institutional production workbench
+# (zero research routes, zero AI deps), use argus-app/Dockerfile.prod.
 # Build context: project root (docker build -f argus-app/Dockerfile .)
-# Zero research endpoints, zero spacy downloads, zero external AI deps.
 # ═══════════════════════════════════════════════════════════════════
 
-# ── Stage 1: Build self-hosted React frontend (Node 22 LTS) ──
+# ── Stage 1: Build self-hosted React frontend (Node 22 LTS for Vite 8) ──
 FROM node:22-alpine AS frontend-build
 WORKDIR /build
 COPY argus-app/frontend/package.json argus-app/frontend/package-lock.json ./
@@ -12,41 +14,33 @@ RUN npm ci
 COPY argus-app/frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Isolated Python 3.12 production runtime ──
+# ── Stage 2: Python 3.12 research runtime (Forge + Tracer + Unified API) ──
 FROM python:3.12-slim AS runtime
 WORKDIR /app
 
-# Install curl + PostgreSQL 16 client matching our PostgreSQL 16 server major version
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
     curl \
-    gnupg \
-    postgresql-common \
-    && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y \
-    && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY argus-app/backend/requirements-prod.txt /tmp/requirements-prod.txt
-RUN pip install --no-cache-dir -r /tmp/requirements-prod.txt \
-    && rm /tmp/requirements-prod.txt
+COPY argus-app/backend/requirements.txt /tmp/requirements.txt
+RUN PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
+RUN PIP_DEFAULT_TIMEOUT=120 PIP_RETRIES=10 python -m spacy download en_core_web_sm
 
-# Copy ONLY shared deterministic graph/heuristic primitives + production backend
-COPY tracer_agent/__init__.py /app/tracer_agent/__init__.py
-COPY tracer_agent/src/__init__.py /app/tracer_agent/src/__init__.py
-COPY tracer_agent/src/config.py /app/tracer_agent/src/config.py
-COPY tracer_agent/src/core/__init__.py /app/tracer_agent/src/core/__init__.py
-COPY tracer_agent/src/core/graph_reasoner.py /app/tracer_agent/src/core/graph_reasoner.py
-COPY tracer_agent/src/core/evidence_synthesizer.py /app/tracer_agent/src/core/evidence_synthesizer.py
-COPY tracer_agent/src/core/heuristics/ /app/tracer_agent/src/core/heuristics/
+# Copy Forge, Tracer, and unified research backend
+COPY src/ /app/src/
+COPY tracer_agent/ /app/tracer_agent/
 COPY argus-app/backend/ /app/argus-app/backend/
 
 # Copy self-hosted frontend build output
 COPY --from=frontend-build /build/dist /app/argus-app/backend/static
 
-ENV PYTHONPATH=/app:/app/argus-app \
+ENV PYTHONPATH=/app \
+    ARGUS_ENV=production \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=0 \
-    PORT=8000
+    PORT=8000 \
+    UNIFIED_MODE=true
 
 RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser -d /app appuser \
     && chown -R appuser:appuser /app
@@ -54,7 +48,7 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8000/api/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD sh -c "curl -fsS http://127.0.0.1:${PORT:-8000}/api/health || exit 1"
 
-CMD ["python", "-m", "uvicorn", "backend.production:get_asgi_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["sh", "-c", "exec python -m uvicorn argus-app.backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

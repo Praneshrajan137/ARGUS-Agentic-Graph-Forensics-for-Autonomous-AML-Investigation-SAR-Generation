@@ -156,7 +156,7 @@ app.add_middleware(
 
 # ── API key authentication middleware ──
 _ARGUS_API_KEY = os.getenv("ARGUS_API_KEY")  # None = auth disabled (dev mode)
-_PUBLIC_PATHS = {"/api/health", "/api/agent/agent.json", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {"/api/health", "/api/runtime", "/api/agent/agent.json", "/docs", "/openapi.json", "/redoc"}
 
 
 @app.middleware("http")
@@ -229,6 +229,12 @@ app.include_router(evidence_router)
 app.include_router(assessment_router)
 app.include_router(benchmark_router)
 app.include_router(agent_router)
+
+
+@app.get("/api/runtime")
+async def runtime_info():
+    """Explicitly identify the synthetic research runtime for frontend mode detection."""
+    return {"mode": "research", "version": UNIFIED_VERSION}
 
 # ── Production mode: serve frontend static files ──
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"

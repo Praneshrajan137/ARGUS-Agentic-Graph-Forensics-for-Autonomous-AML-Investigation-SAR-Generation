@@ -23,7 +23,7 @@ services:
     image: argus-production:local
     build:
       context: ..
-      dockerfile: argus-app/Dockerfile
+      dockerfile: argus-app/Dockerfile.prod
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +44,7 @@ services:
     image: argus-production:local
     build:
       context: ..
-      dockerfile: argus-app/Dockerfile
+      dockerfile: argus-app/Dockerfile.prod
     depends_on:
       migrator:
         condition: service_completed_successfully
@@ -65,7 +65,7 @@ services:
     image: argus-production:local
     build:
       context: ..
-      dockerfile: argus-app/Dockerfile
+      dockerfile: argus-app/Dockerfile.prod
     depends_on:
       - api
     network_mode: "service:api"
@@ -85,7 +85,7 @@ services:
     image: argus-production:local
     build:
       context: ..
-      dockerfile: argus-app/Dockerfile
+      dockerfile: argus-app/Dockerfile.prod
     depends_on:
       migrator:
         condition: service_completed_successfully

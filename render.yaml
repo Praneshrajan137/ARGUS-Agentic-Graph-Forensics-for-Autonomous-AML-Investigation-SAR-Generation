@@ -20,6 +20,8 @@ services:
         value: "8000"
       - key: PYTHONPATH
         value: /app
+      - key: PYTHONHASHSEED
+        value: "0"
       - key: UNIFIED_MODE
         value: "true"
       - key: OPENAI_API_KEY

@@ -155,7 +155,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: argus-app/Dockerfile
+          file: argus-app/Dockerfile.prod
           push: false
           load: true
           tags: argus-production:ci-smoke
@@ -171,6 +171,27 @@ jobs:
           assert '/api/health/live' in paths
           assert not any(p.startswith('/api/generate') for p in paths)
           print('Production image smoke passed')
+          "
+      - name: Build Render research/demo image and verify render.yaml contract
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: argus-app/Dockerfile
+          push: false
+          load: true
+          tags: argus-render:ci-smoke
+      - name: Smoke-test Render image with exact render.yaml env vars
+        run: |
+          docker run --rm argus-render:ci-smoke id -u | grep -qx "1000"
+          docker run --rm -e ARGUS_ENV=production -e SEED=42 -e DIFFICULTY=5 -e GRAPH_SIZE=500 -e PORT=8000 -e PYTHONPATH=/app -e UNIFIED_MODE=true argus-render:ci-smoke python -c "
+          import importlib
+          from fastapi.testclient import TestClient
+          mod = importlib.import_module('argus-app.backend.main')
+          with TestClient(mod.app) as c:
+              assert c.get('/api/health').status_code == 200
+              assert c.get('/api/runtime').json()['mode'] == 'research'
+              assert c.get('/').status_code == 200
+          print('Render research image smoke passed')
           "
 
   security-and-sbom:
