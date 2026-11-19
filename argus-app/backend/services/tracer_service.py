@@ -12,6 +12,8 @@ from tracer_agent.src.core.graph_reasoner import GraphReasoner
 # ═══ Detection Heuristics ═══
 from tracer_agent.src.core.heuristics.structuring import (
     detect_structuring,
+    find_structuring_patterns,
+    find_structuring_windows,
     StructuringResult,
 )
 from tracer_agent.src.core.heuristics.layering import (
@@ -94,7 +96,7 @@ __all__ = [
     # Core engine
     "GraphReasoner",
     # Detection
-    "detect_structuring", "StructuringResult",
+    "detect_structuring", "find_structuring_patterns", "find_structuring_windows", "StructuringResult",
     "detect_layering", "LayeringResult", "LayeringChain",
     # SAR
     "SARDraft", "SARDrafter", "mechanical_sar_template",

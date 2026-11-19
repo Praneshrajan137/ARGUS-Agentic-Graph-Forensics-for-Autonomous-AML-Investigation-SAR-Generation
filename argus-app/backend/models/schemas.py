@@ -192,6 +192,11 @@ class InvestigationResponse(BaseModel):
     evidence_package: dict[str, Any] | None = None
     detection_results: dict[str, Any] | None = None
     validation_errors: list[str] = Field(default_factory=list)
+    validation_result: dict[str, Any] | None = None
+    coverage: dict[str, Any] = Field(default_factory=lambda: {"status": "NOT_REPORTED", "limitations": []})
+    sar_mode: str = "none"
+    retry_count: int = 0
+    investigation_start: str | None = None
     idempotency_key: str = ""
     investigation_timestamp: int = 0
     steps: list[PipelineStep] = Field(default_factory=list)
@@ -276,15 +281,17 @@ class BenchmarkNodeResult(BaseModel):
     node_id: str
     is_crime_node: bool
     expected_typology: str
-    detected_typology: str
-    correct: bool
+    detected_typology: str | None
+    status: str
+    coverage_status: str
+    correct: bool | None
     confidence: float
     investigation_case_id: str
-    assessment_score: float
+    assessment_score: float | None
     duration_ms: int
-    entity_precision: float
-    entity_recall: float
-    entity_f1: float
+    entity_precision: float | None
+    entity_recall: float | None
+    entity_f1: float | None
 
 class BenchmarkAggregateMetrics(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -293,17 +300,21 @@ class BenchmarkAggregateMetrics(BaseModel):
     failed: int
     structuring_detected: bool
     layering_detected: bool
-    crime_detection_rate: float
-    false_positive_rate: float
-    avg_precision: float
-    avg_recall: float
-    avg_f1: float
-    avg_confidence: float
-    avg_assessment_score: float
+    evaluated: int
+    partial: int
+    coverage_rate: float | None
+    evaluation_unit: str
+    crime_detection_rate: float | None
+    false_positive_rate: float | None
+    avg_precision: float | None
+    avg_recall: float | None
+    avg_f1: float | None
+    avg_confidence: float | None
+    avg_assessment_score: float | None
     total_duration_ms: int
-    avg_duration_ms: float
-    structuring_detection_rate: float
-    layering_detection_rate: float
+    avg_duration_ms: float | None
+    structuring_detection_rate: float | None
+    layering_detection_rate: float | None
 
 class BenchmarkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="allow")

@@ -81,7 +81,7 @@ def _networkx_to_reasoner_dict(
     # Build transactions with FIELD NAME MAPPING
     transactions = []
     for u, v, key, data in graph.edges(keys=True, data=True):
-        if u not in reachable and v not in reachable:
+        if u not in reachable or v not in reachable:
             continue
         amount = data.get("amount", 0)
         if not isinstance(amount, Decimal):
@@ -180,12 +180,18 @@ def _langgraph_state_to_response(
     status = result_state.get("status", "FAILED")
     error_message = result_state.get("error_message")
 
-    # Reconstruct validation_errors from validation_result
-    validation_errors = validation_result.get("errors", []) if not validation_result.get("passed", True) else []
+    # Validation errors are derived explicitly; missing passed never implies PASSED.
+    val_errors = validation_result.get("errors", [])
+    val_passed = (
+        validation_result.get("status") == "PASSED"
+        and validation_result.get("passed") is True
+        and not val_errors
+    )
+    validation_errors = list(val_errors) if not val_passed else []
 
-    # Compute idempotency key (same formula as tracer_agent submit_result)
-    idem_input = f"{case_id}{typology}{''.join(sorted(involved))}"
-    idempotency_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
+    # Compute idempotency key (aligned with tracer_agent submit_result)
+    idem_input = f"{case_id}:{typology}:{','.join(sorted(involved))}"
+    idempotency_key = result_state.get("idempotency_key") or hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
 
     # Reconstruct pipeline steps for the frontend PipelineTracker
     steps = _reconstruct_steps(result_state)
@@ -214,6 +220,7 @@ def _langgraph_state_to_response(
         "detection_results": detection_results,
         "validation_errors": validation_errors,
         "validation_result": validation_result,
+        "coverage": result_state.get("coverage", {"status": "NOT_REPORTED", "limitations": []}),
         "retry_count": retry_count,
         "idempotency_key": idempotency_key,
         "investigation_timestamp": result_state.get("investigation_timestamp", int(time.time())),
@@ -281,20 +288,30 @@ def _reconstruct_steps(result_state: dict) -> list[dict]:
             detail += f" (retries={retry_count})"
         steps.append({"name": "draft", "status": "complete", "duration_ms": 0, "detail": detail})
 
-        # Validate step
-        val_status = "complete" if validation.get("passed", True) else "warning"
+        # Validate step — missing metadata is never reported as passed.
         val_errors = validation.get("errors", [])
+        val_passed = (
+            validation.get("status") == "PASSED"
+            and validation.get("passed") is True
+            and not val_errors
+        )
+        val_status = "complete" if val_passed else "warning"
+        val_detail = (
+            "passed"
+            if val_passed
+            else f"{validation.get('status', 'NOT_RUN')} ({len(val_errors)} issues)"
+        )
         steps.append({"name": "validate", "status": val_status, "duration_ms": 0,
-                       "detail": f"{len(val_errors)} issues" if val_errors else "passed"})
+                       "detail": val_detail})
     else:
         steps.append({"name": "draft", "status": "complete", "duration_ms": 0, "detail": "skipped"})
-        steps.append({"name": "validate", "status": "complete", "duration_ms": 0, "detail": "skipped"})
+        steps.append({"name": "validate", "status": "complete", "duration_ms": 0, "detail": "not applicable"})
 
     # Submit step
     idem_key = result_state.get("idempotency_key", "")
     if not idem_key:
         involved = sorted(result_state.get("involved_entities", []))
-        idem_input = f"{result_state.get('case_id', '')}{typology}{''.join(involved)}"
+        idem_input = f"{result_state.get('case_id', '')}:{typology}:{','.join(involved)}"
         idem_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
     steps.append({"name": "submit", "status": "complete", "duration_ms": 0,
                    "detail": f"idem_key={idem_key[:16]}..."})
@@ -327,6 +344,7 @@ def _seed_pending_investigation(case_id: str, subject_id: str, jurisdiction: str
         "detection_results": None,
         "validation_errors": [],
         "validation_result": None,
+        "coverage": {"status": "NOT_REPORTED", "limitations": []},
         "retry_count": 0,
         "idempotency_key": "",
         "investigation_timestamp": 0,
@@ -405,9 +423,11 @@ def _step_detail_from_state(step_name: str, lg_state: dict) -> str:
     elif step_name == "validate":
         vr = lg_state.get("validation_result") or {}
         errs = vr.get("errors", [])
-        return f"{len(errs)} issues" if errs else "passed"
+        if vr.get("status") == "PASSED" and vr.get("passed") is True and not errs:
+            return "passed"
+        return f"{vr.get('status', 'NOT_RUN')} ({len(errs)} issues)"
     elif step_name == "submit":
-        return "filed"
+        return "research submission complete (not filed)"
     return ""
 
 

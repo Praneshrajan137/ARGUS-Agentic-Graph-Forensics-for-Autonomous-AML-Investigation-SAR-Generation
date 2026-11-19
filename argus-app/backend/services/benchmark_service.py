@@ -12,7 +12,7 @@ from ..models.state import get_state
 from .forge_service import generate_world
 from .investigation_service import run_investigation, _networkx_to_reasoner_dict
 from .assessment_service import run_assessment
-from .tracer_service import GraphReasoner, detect_structuring, detect_layering
+from .tracer_service import GraphReasoner, find_structuring_patterns, detect_layering
 
 logger = logging.getLogger(__name__)
 
@@ -57,54 +57,57 @@ def _is_detection_correct(expected: str, detected: str) -> bool:
     return expected == detected
 
 
-def _compute_aggregate(node_results: list[dict], total_duration_ms: int) -> dict:
-    """Compute aggregate metrics from all per-node results."""
-    completed = [r for r in node_results if r.get("detected_typology") is not None]
-    failed = len(node_results) - len(completed)
+def _subject_typology(detection: dict, subject_id: str) -> str:
+    structuring = any(
+        subject_id in {str(hit["node"]), *(str(node) for node in hit.get("sources", []))}
+        for hit in detection.get("structuring_hits", [])
+    )
+    layering = any(subject_id in {str(node) for node in hit.get("chain_nodes", [])}
+                   for hit in detection.get("layering_hits", []))
+    return "BOTH" if structuring and layering else "STRUCTURING" if structuring else "LAYERING" if layering else "NONE"
 
-    crime_nodes = [r for r in completed if r["expected_typology"] != "NONE"]
-    clean_nodes = [r for r in completed if r["expected_typology"] == "NONE"]
-    structuring_nodes = [r for r in completed if r["expected_typology"] in ("STRUCTURING", "BOTH")]
-    layering_nodes = [r for r in completed if r["expected_typology"] in ("LAYERING", "BOTH")]
 
-    # Detection rates
-    crime_correct = sum(1 for r in crime_nodes if r["correct"])
-    crime_detection_rate = crime_correct / len(crime_nodes) if crime_nodes else 0.0
+def _compute_aggregate(
+    node_results: list[dict],
+    total_duration_ms: int,
+    evaluation_unit: str = "full_neighborhood_subject_participation",
+) -> dict:
+    completed = [row for row in node_results if row.get("status") == "COMPLETE"]
+    evaluated = [row for row in completed if row.get("coverage_status") == "COMPLETE"
+                 and row.get("detected_typology") in {"NONE", "STRUCTURING", "LAYERING", "BOTH"}]
+    crime_nodes = [row for row in node_results if row["expected_typology"] != "NONE"]
+    clean_nodes = [row for row in evaluated if row["expected_typology"] == "NONE"]
 
-    clean_flagged = sum(1 for r in clean_nodes if r["detected_typology"] != "NONE")
-    false_positive_rate = clean_flagged / len(clean_nodes) if clean_nodes else 0.0
+    def ratio(numerator: int, denominator: int) -> float | None:
+        return round(numerator / denominator, 4) if denominator else None
 
-    s_correct = sum(1 for r in structuring_nodes if r["detected_typology"] in ("STRUCTURING", "BOTH"))
-    structuring_detection_rate = s_correct / len(structuring_nodes) if structuring_nodes else 0.0
+    def mean(key: str) -> float | None:
+        values = [row[key] for row in evaluated if row.get(key) is not None]
+        return round(sum(values) / len(values), 4) if values else None
 
-    l_correct = sum(1 for r in layering_nodes if r["detected_typology"] in ("LAYERING", "BOTH"))
-    layering_detection_rate = l_correct / len(layering_nodes) if layering_nodes else 0.0
+    def detection_rate(typology: str) -> float | None:
+        expected = [row for row in node_results if row["expected_typology"] in {typology, "BOTH"}]
+        found = sum(row["expected_typology"] in {typology, "BOTH"}
+                    and row["detected_typology"] in {typology, "BOTH"} for row in evaluated)
+        return ratio(found, len(expected))
 
-    # Averages across all completed investigations
-    avg_precision = sum(r["entity_precision"] for r in completed) / len(completed) if completed else 0.0
-    avg_recall = sum(r["entity_recall"] for r in completed) / len(completed) if completed else 0.0
-    avg_f1 = sum(r["entity_f1"] for r in completed) / len(completed) if completed else 0.0
-    avg_confidence = sum(r["confidence"] for r in completed) / len(completed) if completed else 0.0
-    avg_assessment = sum(r["assessment_score"] for r in completed) / len(completed) if completed else 0.0
-    avg_duration = total_duration_ms / len(completed) if completed else 0.0
-
+    structuring_rate = detection_rate("STRUCTURING")
+    layering_rate = detection_rate("LAYERING")
     return {
-        "total_investigations": len(node_results),
-        "completed": len(completed),
-        "failed": failed,
-        "structuring_detected": structuring_detection_rate > 0,
-        "layering_detected": layering_detection_rate > 0,
-        "crime_detection_rate": round(crime_detection_rate, 4),
-        "false_positive_rate": round(false_positive_rate, 4),
-        "avg_precision": round(avg_precision, 4),
-        "avg_recall": round(avg_recall, 4),
-        "avg_f1": round(avg_f1, 4),
-        "avg_confidence": round(avg_confidence, 4),
-        "avg_assessment_score": round(avg_assessment, 2),
-        "total_duration_ms": total_duration_ms,
-        "avg_duration_ms": round(avg_duration, 1),
-        "structuring_detection_rate": round(structuring_detection_rate, 4),
-        "layering_detection_rate": round(layering_detection_rate, 4),
+        "total_investigations": len(node_results), "completed": len(completed),
+        "failed": len(node_results) - len(completed), "evaluated": len(evaluated),
+        "partial": len(completed) - len(evaluated),
+        "coverage_rate": ratio(len(evaluated), len(node_results)),
+        "evaluation_unit": evaluation_unit,
+        "structuring_detected": bool(structuring_rate), "layering_detected": bool(layering_rate),
+        "crime_detection_rate": ratio(sum(row["expected_typology"] != "NONE" and row.get("correct") is True
+                                          for row in evaluated), len(crime_nodes)),
+        "false_positive_rate": ratio(sum(row["detected_typology"] != "NONE" for row in clean_nodes), len(clean_nodes)),
+        "avg_precision": mean("entity_precision"), "avg_recall": mean("entity_recall"),
+        "avg_f1": mean("entity_f1"), "avg_confidence": mean("confidence"),
+        "avg_assessment_score": mean("assessment_score"), "total_duration_ms": total_duration_ms,
+        "avg_duration_ms": ratio(total_duration_ms, len(node_results)),
+        "structuring_detection_rate": structuring_rate, "layering_detection_rate": layering_rate,
     }
 
 
@@ -178,7 +181,11 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
                     hop_depth=hop_depth,
                     jurisdiction=jurisdiction,
                 )
-                detected = inv_result.get("detected_typology", "NONE")
+                status = inv_result.get("status", "FAILED")
+                if status != "COMPLETE":
+                    raise ValueError("Investigation did not complete")
+                coverage_status = (inv_result.get("coverage") or {}).get("status", "NOT_REPORTED")
+                detected = _subject_typology(inv_result.get("detection_results") or {}, node_id)
                 confidence = inv_result.get("confidence_score", 0.0)
 
                 # Run assessment
@@ -191,16 +198,20 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
 
             except Exception as e:
                 logger.warning("Benchmark investigation failed for node %s: %s", node_id, e)
-                detected = "NONE"
+                status = "FAILED"
+                coverage_status = "NOT_EVALUATED"
+                detected = None
                 confidence = 0.0
-                assessment_score = 0.0
-                precision = recall = f1 = 0.0
+                assessment_score = None
+                precision = recall = f1 = None
 
             duration_ms = int((time.time() - t0) * 1000)
-            correct = _is_detection_correct(expected, detected)
+            correct = _is_detection_correct(expected, detected) if status == "COMPLETE" and coverage_status == "COMPLETE" else None
 
             node_results.append({
                 "node_id": node_id,
+                "status": status,
+                "coverage_status": coverage_status,
                 "is_crime_node": is_crime,
                 "expected_typology": expected,
                 "detected_typology": detected,
@@ -223,7 +234,10 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
 
         # Step 5: Compute aggregate metrics
         total_duration_ms = int((time.time() - t_total_start) * 1000)
-        aggregate = _compute_aggregate(node_results, total_duration_ms)
+        aggregate = _compute_aggregate(
+            node_results, total_duration_ms,
+            evaluation_unit="full_neighborhood_subject_participation",
+        )
 
         with state._lock:
             benchmark["status"] = "COMPLETE"
@@ -232,11 +246,11 @@ def run_benchmark(benchmark_id: str, config: dict[str, Any]) -> None:
             benchmark["completed_at"] = datetime.now().isoformat()
 
         logger.info(
-            "Benchmark %s complete: %d nodes, detection_rate=%.2f%%, FPR=%.2f%%, F1=%.4f",
+            "Benchmark %s complete: %d nodes, detection_rate=%s, FPR=%s, F1=%s",
             benchmark_id, len(all_node_ids),
-            aggregate["crime_detection_rate"] * 100,
-            aggregate["false_positive_rate"] * 100,
-            aggregate["avg_f1"],
+            f"{aggregate['crime_detection_rate'] * 100:.2f}%" if aggregate["crime_detection_rate"] is not None else "N/A",
+            f"{aggregate['false_positive_rate'] * 100:.2f}%" if aggregate["false_positive_rate"] is not None else "N/A",
+            f"{aggregate['avg_f1']:.4f}" if aggregate["avg_f1"] is not None else "N/A",
         )
 
     except Exception as e:
@@ -308,17 +322,39 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
         node_results: list[dict] = []
         t_total_start = time.time()
 
-        # Step 5: Run detection on every node
+        participation: dict[str, set[str]] = {}
+        seen_structuring: set[tuple] = set()
+        seen_layering: set[tuple[str, ...]] = set()
+        # Fast node-local sweep attributes deduplicated findings to participants;
+        # kept distinct from full neighborhood discovery via evaluation_unit.
         for idx, node_id in enumerate(all_node_ids):
             expected = typology_map.get(node_id, "NONE")
             is_crime = expected != "NONE"
 
             t0 = time.time()
             try:
-                s_result = detect_structuring(reasoner, node_id, currency=currency)
-                l_result = detect_layering(reasoner, node_id, max_depth=hop_depth)
+                s_patterns = find_structuring_patterns(reasoner, node_id, currency=currency)
+                l_result = detect_layering(reasoner, node_id, max_depth=hop_depth, currency=currency)
+                status = "COMPLETE"
+                coverage_status = reasoner.coverage["status"]
+                for pattern in s_patterns:
+                    finding_key = (
+                        pattern.target_node, pattern.currency, pattern.mode,
+                        pattern.window_start, pattern.window_end,
+                        tuple(tx["tx_id"] for tx in pattern.qualifying_transactions),
+                    )
+                    if finding_key not in seen_structuring:
+                        seen_structuring.add(finding_key)
+                        for participant in [pattern.target_node, *pattern.counterpart_nodes]:
+                            participation.setdefault(participant, set()).add("STRUCTURING")
+                for chain in l_result.chains:
+                    chain_key = tuple(tx["tx_id"] for tx in chain.chain_transactions)
+                    if chain_key not in seen_layering:
+                        seen_layering.add(chain_key)
+                        for participant in chain.chain_nodes:
+                            participation.setdefault(participant, set()).add("LAYERING")
 
-                s_detected = s_result.detected
+                s_detected = bool(s_patterns)
                 l_detected = l_result.detected
 
                 if s_detected and l_detected:
@@ -330,32 +366,35 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
                 else:
                     detected = "NONE"
 
-                # Take max confidence from either detection
-                s_conf = float(s_result.confidence) if s_detected else 0.0
+                s_conf = max((float(p.confidence) for p in s_patterns), default=0.0)
                 l_conf = float(l_result.confidence) if l_detected else 0.0
                 confidence = max(s_conf, l_conf)
 
             except Exception as e:
-                logger.warning("Fast sweep failed for node %s: %s", node_id, e)
-                detected = "NONE"
+                logger.warning("Fast sweep failed for node %s: %s", node_id, type(e).__name__)
+                status = "FAILED"
+                coverage_status = "NOT_EVALUATED"
+                detected = None
                 confidence = 0.0
 
             duration_ms = int((time.time() - t0) * 1000)
-            correct = _is_detection_correct(expected, detected)
+            correct = _is_detection_correct(expected, detected) if status == "COMPLETE" and coverage_status == "COMPLETE" else None
 
             node_results.append({
                 "node_id": node_id,
+                "status": status,
+                "coverage_status": coverage_status,
                 "is_crime_node": is_crime,
                 "expected_typology": expected,
                 "detected_typology": detected,
                 "correct": correct,
                 "confidence": confidence,
                 "investigation_case_id": f"fast-{benchmark_id[:8]}-{idx}",
-                "assessment_score": 0.0,
+                "assessment_score": None,
                 "duration_ms": duration_ms,
-                "entity_precision": 0.0,
-                "entity_recall": 0.0,
-                "entity_f1": 0.0,
+                "entity_precision": None,
+                "entity_recall": None,
+                "entity_f1": None,
             })
 
             # Update progress
@@ -365,9 +404,18 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
                 benchmark["progress"] = round(((idx + 1) / len(all_node_ids)) * 100, 1)
                 benchmark["node_results"] = node_results
 
-        # Step 6: Compute aggregate metrics
+        sweep_complete = reasoner.coverage["status"] == "COMPLETE" and all(row["status"] == "COMPLETE" for row in node_results)
+        for row in node_results:
+            if row["status"] != "COMPLETE":
+                continue
+            kinds = participation.get(row["node_id"], set())
+            row["detected_typology"] = "BOTH" if len(kinds) == 2 else next(iter(kinds), "NONE")
+            row["coverage_status"] = "COMPLETE" if sweep_complete else "PARTIAL"
+            row["correct"] = _is_detection_correct(row["expected_typology"], row["detected_typology"]) if sweep_complete else None
         total_duration_ms = int((time.time() - t_total_start) * 1000)
-        aggregate = _compute_aggregate(node_results, total_duration_ms)
+        aggregate = _compute_aggregate(
+            node_results, total_duration_ms, evaluation_unit="fast_node_local_sweep",
+        )
 
         with state._lock:
             benchmark["status"] = "COMPLETE"
@@ -379,8 +427,8 @@ def run_benchmark_fast(benchmark_id: str, config: dict[str, Any]) -> None:
             "Fast benchmark %s complete: %d nodes in %.1fs, detection_rate=%.2f%%, FPR=%.2f%%",
             benchmark_id, len(all_node_ids),
             total_duration_ms / 1000,
-            aggregate["crime_detection_rate"] * 100,
-            aggregate["false_positive_rate"] * 100,
+            (aggregate["crime_detection_rate"] or 0) * 100,
+            (aggregate["false_positive_rate"] or 0) * 100,
         )
 
     except Exception as e:
