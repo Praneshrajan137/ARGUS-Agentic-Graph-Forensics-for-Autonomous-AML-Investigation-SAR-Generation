@@ -11,8 +11,14 @@
 .git
 .gitignore
 
-# Virtual environment (installed fresh from requirements.txt in Docker)
+# Virtual environments & frontend caches (installed fresh inside Docker stages)
 .venv
+**/.venv
+**/node_modules
+argus-app/frontend/dist
+argus-app/eval/results
+.pytest_tmp_root
+.kiro
 
 # Test & coverage artifacts (not needed at runtime)
 tests/

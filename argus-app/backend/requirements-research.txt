@@ -1,0 +1,11 @@
+# ARGUS Research / Synthetic Evaluation Runtime — Locked Python 3.12 Dependencies
+-r requirements-prod.txt
+Faker==40.1.2
+hypothesis==6.170.14
+langchain-core==0.3.30
+langgraph==0.2.60
+numpy==2.2.0
+openai==1.59.9
+protobuf==7.36.2
+python-dotenv==1.0.1
+spacy==3.8.4
