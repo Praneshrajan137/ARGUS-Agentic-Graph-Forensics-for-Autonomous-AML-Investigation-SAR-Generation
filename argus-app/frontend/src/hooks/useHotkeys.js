@@ -13,7 +13,9 @@ import { useEffect, useRef } from 'react';
  */
 export function useHotkeys(shortcuts) {
   const ref = useRef(shortcuts);
-  ref.current = shortcuts;
+  useEffect(() => {
+    ref.current = shortcuts;
+  });
 
   useEffect(() => {
     function onKeyDown(e) {

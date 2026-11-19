@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Globe, Calendar, User, MapPin, AlertTriangle, Scale, Copy, Check } from 'lucide-react';
+import { Globe, Calendar, User, MapPin, AlertTriangle, Scale, Copy, Check } from 'lucide-react';
 import TypologyBadge from '@/components/shared/TypologyBadge';
 
 const sarEntrance = {
@@ -12,21 +12,18 @@ export default function SARDocument({ investigation }) {
   if (!investigation) return null;
 
   const { sar_draft, sar_narrative, jurisdiction, case_id,
-          confidence_score, detected_typology, investigation_start } = investigation;
+          detected_typology, investigation_timestamp, investigation_start } = investigation;
 
-  const isFinCEN = jurisdiction !== 'fiu_ind';
-  const regLabel = isFinCEN ? 'FinCEN Suspicious Activity Report' : 'FIU-IND Suspicious Transaction Report';
-  const regAct = isFinCEN ? 'Bank Secrecy Act (31 U.S.C. § 5318)' : 'Prevention of Money Laundering Act, 2002 (PMLA)';
-  const regBody = isFinCEN ? 'Financial Crimes Enforcement Network (FinCEN)' : 'Financial Intelligence Unit — India (FIU-IND)';
-  const tzLabel = isFinCEN ? 'UTC' : 'IST (+05:30)';
-
-  // Format timestamp for jurisdiction
-  const formatTime = (isoStr) => {
-    if (!isoStr) return 'N/A';
-    const d = new Date(isoStr);
-    if (isFinCEN) return d.toUTCString();
-    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-  };
+  const isFinCEN = jurisdiction === 'fincen';
+  const isFiuInd = jurisdiction === 'fiu_ind';
+  const regAct = isFinCEN
+    ? 'Bank Secrecy Act (31 U.S.C. § 5318)'
+    : isFiuInd ? 'Prevention of Money Laundering Act, 2002 (PMLA)' : null;
+  const regBody = isFinCEN
+    ? 'Financial Crimes Enforcement Network (FinCEN)'
+    : isFiuInd ? 'Financial Intelligence Unit — India (FIU-IND)' : 'Not provided';
+  const submissionNotice = `Not submitted to FinCEN.${isFiuInd ? ' Not submitted to FIU-IND.' : ''}`;
+  const createdAt = persistedCreationTime(investigation_timestamp, investigation_start);
 
   return (
     <motion.div
@@ -35,7 +32,7 @@ export default function SARDocument({ investigation }) {
       animate="show"
       className="relative max-w-4xl mx-auto"
       role="document"
-      aria-label={`SAR Report ${case_id}`}
+      aria-label={`Draft investigation narrative ${case_id || ''}`.trim()}
     >
       {/* CONFIDENTIAL Watermark */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
@@ -64,10 +61,18 @@ export default function SARDocument({ investigation }) {
                 className="font-display text-2xl tracking-tight"
                 style={{ color: 'var(--sar-heading)' }}
               >
-                {regLabel}
+                Draft investigation narrative
               </h1>
               <p className="text-sm mt-1" style={{ color: 'var(--sar-label)' }}>
-                Filed pursuant to {regAct}
+                {regAct
+                  ? `Prepared under ${regAct} for review—not filed.`
+                  : 'Prepared for review—not filed. Regulatory context not provided.'}
+              </p>
+              <p className="text-xs mt-2" style={{ color: 'var(--sar-label)' }}>
+                Regulatory context only; this draft does not establish legal compliance.
+              </p>
+              <p className="text-sm font-semibold mt-2" style={{ color: 'var(--sar-heading)' }}>
+                {submissionNotice}
               </p>
             </div>
             <div className="text-right">
@@ -76,12 +81,17 @@ export default function SARDocument({ investigation }) {
           </div>
 
           {/* Metadata Grid */}
-          <div className="grid grid-cols-4 gap-4 mt-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
             {[
-              { label: 'Case ID', value: case_id, mono: true },
-              { label: 'Filing Date', value: formatTime(investigation_start) },
-              { label: 'Jurisdiction', value: isFinCEN ? 'United States' : 'India' },
-              { label: 'Confidence', value: `${Math.round(confidence_score * 100)}%`, mono: true },
+              { label: 'Case ID', value: case_id || 'Not provided', mono: true },
+              {
+                label: 'Created (UTC)',
+                value: createdAt
+                  ? <time dateTime={createdAt.toISOString()} data-testid="investigation-created-at">{createdAt.toUTCString()}</time>
+                  : 'Not available',
+              },
+              { label: 'Jurisdiction', value: isFinCEN ? 'United States' : isFiuInd ? 'India' : jurisdiction || 'Unknown' },
+              { label: 'Document status', value: 'Draft — for review' },
             ].map(({ label, value, mono }) => (
               <div key={label}>
                 <span className="text-[10px] uppercase tracking-wider font-semibold"
@@ -117,15 +127,14 @@ export default function SARDocument({ investigation }) {
           <SARSection
             icon={MapPin}
             label="WHERE — Geographic Information"
-            content={sar_draft?.where || (isFinCEN ? 'United States' : 'India')}
+            content={sar_draft?.where?.trim() || 'Unknown — geographic information not provided'}
           />
 
           {/* WHEN — Timeframe */}
           <SARSection
             icon={Calendar}
             label="WHEN — Timeframe of Activity"
-            content={sar_draft?.when || 'See transaction records'}
-            sublabel={`All timestamps in ${tzLabel}`}
+            content={sar_draft?.when || 'Activity timeframe not provided'}
           />
 
           {/* WHY — Suspicious Indicators */}
@@ -140,15 +149,15 @@ export default function SARDocument({ investigation }) {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold uppercase tracking-wider"
                   style={{ color: 'var(--sar-heading)' }}>
-                Full Narrative
+                Full Draft Narrative
               </h3>
-              {sar_narrative && <SARCopyButton text={sar_narrative} />}
+              {sar_narrative && <SARCopyButton text={sar_narrative} submissionNotice={submissionNotice} />}
             </div>
             <div
               className="font-mono text-sm leading-[1.8] whitespace-pre-wrap"
               style={{ color: 'var(--sar-text)' }}
             >
-              {sar_narrative}
+              {sar_narrative || 'No draft narrative available.'}
             </div>
           </div>
 
@@ -176,18 +185,17 @@ export default function SARDocument({ investigation }) {
 
         {/* ═══ REGULATORY FOOTER ═══ */}
         <div
-          className="px-8 py-4 border-t-2 flex items-center justify-between"
+          className="px-8 py-4 border-t-2 flex flex-wrap items-center justify-between gap-3"
           style={{ borderColor: 'var(--sar-border)', background: 'rgba(241, 245, 249, 0.5)' }}
         >
           <div className="flex items-center gap-2">
             <Globe className="w-3.5 h-3.5" style={{ color: 'var(--sar-label)' }} />
             <span className="text-[10px] font-mono" style={{ color: 'var(--sar-label)' }}>
-              {regBody}
+              Regulatory context: {regBody}
             </span>
           </div>
           <span className="text-[10px] font-mono" style={{ color: 'var(--sar-label)' }}>
-            Generated by ARGUS v1.0.0 · TRACER v7.0.0 ·{' '}
-            {formatTime(new Date().toISOString())}
+            Draft only · Review required before any submission
           </span>
         </div>
       </div>
@@ -195,15 +203,23 @@ export default function SARDocument({ investigation }) {
   );
 }
 
-function SARCopyButton({ text }) {
+/** The API persists epoch seconds; never substitute the viewer's current time. */
+function persistedCreationTime(timestamp, start) {
+  const epoch = Number.isFinite(timestamp) ? new Date(timestamp * 1000) : null;
+  if (epoch && Number.isFinite(epoch.getTime())) return epoch;
+  const fallback = typeof start === 'string' && start.trim() ? new Date(start) : null;
+  return fallback && Number.isFinite(fallback.getTime()) ? fallback : null;
+}
+
+function SARCopyButton({ text, submissionNotice }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(`Draft investigation narrative\n${submissionNotice} For review only.\n\n${text}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard may fail in non-HTTPS */ }
-  }, [text]);
+  }, [text, submissionNotice]);
 
   return (
     <button
@@ -211,12 +227,14 @@ function SARCopyButton({ text }) {
       className="relative z-20 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-btn
                  bg-surface-0/90 backdrop-blur-sm border border-surface-3
                  hover:bg-surface-1 transition-colors"
-      title="Copy narrative to clipboard"
+      type="button"
+      title="Copy draft narrative to clipboard"
+      aria-live="polite"
     >
       {copied ? (
-        <><Check className="w-3.5 h-3.5 text-emerald-500" /><span className="text-emerald-600">Copied</span></>
+        <><Check className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" /><span className="text-emerald-600">Draft copied</span></>
       ) : (
-        <><Copy className="w-3.5 h-3.5 text-text-2" /><span className="text-text-2">Copy</span></>
+        <><Copy className="w-3.5 h-3.5 text-text-2" aria-hidden="true" /><span className="text-text-2">Copy draft</span></>
       )}
     </button>
   );

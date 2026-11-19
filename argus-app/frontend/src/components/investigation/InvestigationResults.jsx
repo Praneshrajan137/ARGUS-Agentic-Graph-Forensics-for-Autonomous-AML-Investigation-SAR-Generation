@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
+import React, { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -17,30 +17,6 @@ import TypologyBadge from '@/components/shared/TypologyBadge';
 import StatusBadge from '@/components/shared/StatusBadge';
 import AccordionSection from '@/components/shared/AccordionSection';
 
-/**
- * Returns a CSS color variable based on confidence score (0–1 scale).
- * 0–0.29 → rose, 0.30–0.59 → amber, 0.60–0.79 → emerald, 0.80–1.0 → accent
- */
-export function confidenceColor(score) {
-  const pct = (score ?? 0) * 100;
-  if (pct >= 80) return 'var(--accent-base)';
-  if (pct >= 60) return 'var(--emerald-base)';
-  if (pct >= 30) return 'var(--amber-base)';
-  return 'var(--rose-base)';
-}
-
-/** Animated counter from 0 to value using spring physics. */
-function AnimatedNumber({ value, duration = 0.8 }) {
-  const spring = useSpring(0, { stiffness: 100, damping: 30 });
-  const display = useTransform(spring, (v) => Math.round(v));
-
-  useEffect(() => {
-    spring.set(value);
-  }, [value, spring]);
-
-  return <motion.span>{display}</motion.span>;
-}
-
 /** SAR document entrance animation */
 const sarEntrance = {
   hidden: { opacity: 0, y: 20 },
@@ -51,39 +27,12 @@ const sarEntrance = {
   },
 };
 
-/**
- * Investigation results display with 7 sections:
- * 1. Result Header (typology + confidence)
- * 2. Confidence Breakdown (formula visualization)
- * 3. SAR Narrative Preview (paper metaphor + watermark)
- * 4. Detection Details (structuring + layering accordions)
- * 5. Evidence Package (verdict + discrepancies)
- * 6. Validation Report (hallucination check)
- * 7. Action Bar (Score / View SAR / Browse Evidence)
- *
- * @param {Object} result — Full investigation response from POST /api/investigation/investigate
- */
+/** Investigation artifacts, heuristic score, and explicitly reported source checks. */
 export default function InvestigationResults({ result }) {
   if (!result) return null;
 
   const totalDuration =
     result.steps?.reduce((sum, s) => sum + (s.duration_ms || 0), 0) || 0;
-
-  // Confidence breakdown calculation
-  const typology = result.detected_typology || 'NONE';
-  const base = typology === 'BOTH' ? 0.6 : typology === 'NONE' ? 0.0 : 0.3;
-  const evBoost =
-    result.evidence_package?.verdict &&
-    [
-      'CORROBORATED',
-      'SUSPICIOUS_DISCREPANCY',
-      'CONFIRMED',
-      'PARTIAL_MATCH',
-    ].includes(result.evidence_package.verdict)
-      ? 0.2
-      : 0.0;
-  const discBoost =
-    (result.evidence_package?.discrepancies?.length || 0) > 0 ? 0.2 : 0.0;
 
   return (
     <motion.div
@@ -102,78 +51,20 @@ export default function InvestigationResults({ result }) {
             {result.steps?.length || 0} steps · {totalDuration}ms
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-2">Confidence</span>
-          <span
-            className="font-mono text-2xl font-bold tabular-nums"
-            style={{ color: confidenceColor(result.confidence_score) }}
-            data-testid="confidence-value"
-          >
-            <AnimatedNumber
-              value={Math.round((result.confidence_score ?? 0) * 100)}
-            />
-            %
+        <div className="text-xs text-text-2">
+          <span>Heuristic score (uncalibrated): </span>
+          <span className="font-mono tabular-nums" data-testid="heuristic-score">
+            {Number.isFinite(result.confidence_score) ? result.confidence_score : 'Not available'}
           </span>
+          <p className="text-text-3 mt-1">Not a probability or verification result.</p>
         </div>
       </div>
 
-      {/* ═══ Section 2: Confidence Breakdown ═══ */}
-      <div data-testid="confidence-breakdown">
-        <h4 className="text-xs font-semibold text-text-2 uppercase tracking-wider mb-3">
-          Confidence Formula
-        </h4>
-        <div className="flex items-center gap-2 flex-wrap font-mono text-sm">
-          <BreakdownChip
-            label="base"
-            value={base.toFixed(1)}
-            sublabel={typology}
-            highlight={base > 0}
-            tintVar="--emerald-tint"
-            colorVar="--emerald-base"
-          />
-          <span className="text-text-3 font-bold">+</span>
-          <BreakdownChip
-            label="evidence"
-            value={evBoost.toFixed(1)}
-            sublabel={result.evidence_package?.verdict || 'N/A'}
-            highlight={evBoost > 0}
-            tintVar="--accent-tint"
-            colorVar="--accent-base"
-          />
-          <span className="text-text-3 font-bold">+</span>
-          <BreakdownChip
-            label="discrepancy"
-            value={discBoost.toFixed(1)}
-            sublabel={
-              discBoost > 0
-                ? `${result.evidence_package?.discrepancies?.length} found`
-                : 'None'
-            }
-            highlight={discBoost > 0}
-            tintVar="--amber-tint"
-            colorVar="--amber-base"
-          />
-          <span className="text-text-3 font-bold">=</span>
-          <span
-            className="px-3 py-1.5 rounded-badge font-bold text-base"
-            style={{
-              background:
-                (result.confidence_score ?? 0) >= 0.5
-                  ? 'var(--emerald-tint)'
-                  : 'var(--rose-tint)',
-              color:
-                (result.confidence_score ?? 0) >= 0.5
-                  ? 'var(--emerald-base)'
-                  : 'var(--rose-base)',
-            }}
-            data-testid="confidence-total"
-          >
-            {((result.confidence_score ?? 0) * 100).toFixed(0)}%
-          </span>
-        </div>
+      {/* ═══ Draft Narrative Preview ═══ */}
+      <div>
+        <h4 className="text-sm font-semibold text-text-1">Draft investigation narrative</h4>
+        <p className="text-xs text-text-2 mt-1">Not submitted to FinCEN. For review only.</p>
       </div>
-
-      {/* ═══ Section 3: SAR Narrative Preview ═══ */}
       <div className="relative" data-testid="sar-preview">
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <span
@@ -200,8 +91,7 @@ export default function InvestigationResults({ result }) {
             color: 'var(--sar-text)',
           }}
         >
-          {result.sar_narrative ||
-            'No SAR generated (confidence below threshold).'}
+          {result.sar_narrative || 'No draft narrative available.'}
         </div>
       </div>
 
@@ -227,16 +117,15 @@ export default function InvestigationResults({ result }) {
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono text-sm font-bold text-text-0">
-                  Mule:{' '}
-                  <span style={{ color: 'var(--rose-base)' }}>{hit.node}</span>
+                  Account: {hit.node ?? 'Unknown'}
                 </span>
                 <span className="font-mono text-xs text-text-2">
-                  {hit.tx_count} txns · {hit.currency}
+                  {hit.tx_count ?? 'Unknown'} txns
                 </span>
               </div>
               <div className="font-mono text-sm text-text-1">
-                Total: <span className="font-bold">${hit.total}</span>
-                <span className="text-text-3 ml-2">Mode: {hit.mode}</span>
+                Total: <span className="font-bold">{hit.currency?.trim() || 'Currency unknown'} {hit.total ?? 'Not available'}</span>
+                <span className="text-text-3 ml-2">Mode: {hit.currency?.trim() || 'Currency unknown'} {hit.mode ?? 'Not available'}</span>
               </div>
               {(hit.sources || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
@@ -329,18 +218,18 @@ export default function InvestigationResults({ result }) {
             <span className="text-sm text-text-2">Verdict:</span>
             <span
               className={`px-2.5 py-0.5 rounded-badge text-xs font-bold uppercase ${
-                result.evidence_package?.verdict === 'CORROBORATED'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : result.evidence_package?.verdict ===
-                      'SUSPICIOUS_DISCREPANCY'
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-surface-2 text-text-2'
+                result.evidence_package?.verdict === 'DISAGREEMENT'
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-surface-2 text-text-2'
               }`}
               data-testid="evidence-verdict"
             >
-              {result.evidence_package?.verdict || 'N/A'}
+              {result.evidence_package?.verdict || 'Not provided'}
             </span>
           </div>
+          <p className="text-xs text-text-2">
+            Evidence verdicts describe available observations, not a determination of suspicious activity.
+          </p>
           {result.evidence_package?.reasoning && (
             <p className="text-sm text-text-1 leading-relaxed">
               {result.evidence_package.reasoning}
@@ -364,43 +253,11 @@ export default function InvestigationResults({ result }) {
         </div>
       </AccordionSection>
 
-      {/* ═══ Section 6: Validation Report ═══ */}
-      <AccordionSection
-        title="Hallucination Validation"
-        count={result.validation_errors?.length || 0}
-        defaultOpen
-        icon={ShieldCheck}
-        accentColor={
-          (result.validation_errors?.length || 0) > 0
-            ? 'var(--rose-base)'
-            : 'var(--emerald-base)'
-        }
-      >
-        {(result.validation_errors || []).length === 0 ? (
-          <div
-            className="flex items-center gap-2 text-sm"
-            style={{ color: 'var(--emerald-base)' }}
-            data-testid="validation-pass"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span className="font-medium">
-              Zero hallucinations detected — all entities and transactions
-              verified
-            </span>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {result.validation_errors.map((err, i) => (
-              <div
-                key={i}
-                className="p-2 bg-rose-50 rounded text-xs font-mono text-rose-800"
-              >
-                {err}
-              </div>
-            ))}
-          </div>
-        )}
-      </AccordionSection>
+      {/* ═══ Analysis Coverage ═══ */}
+      <AnalysisCoverage coverage={result.coverage} typology={result.detected_typology} />
+
+      {/* ═══ Source Checks ═══ */}
+      <SourceChecks validation={result.validation_result} />
 
       {/* ═══ Section 7: Action Bar ═══ */}
       <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-surface-3 mt-6">
@@ -420,7 +277,7 @@ export default function InvestigationResults({ result }) {
           data-testid="view-sar-btn"
         >
           <FileText className="w-4 h-4" />
-          View Full SAR
+          View Draft Narrative
         </Link>
         <Link
           to={`/evidence?entity_id=${result.subject_id}`}
@@ -441,7 +298,7 @@ function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(`Draft investigation narrative\nNot submitted to FinCEN. For review only.\n\n${text}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard API may fail in non-HTTPS */ }
@@ -453,40 +310,126 @@ function CopyButton({ text }) {
       className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-btn
                  bg-surface-0/90 backdrop-blur-sm border border-surface-3
                  hover:bg-surface-1 transition-colors"
-      title="Copy narrative to clipboard"
+      type="button"
+      title="Copy draft narrative to clipboard"
+      aria-live="polite"
       data-testid="copy-narrative-btn"
     >
       {copied ? (
-        <><CheckIcon className="w-3.5 h-3.5 text-emerald-500" /><span className="text-emerald-600">Copied</span></>
+        <><CheckIcon className="w-3.5 h-3.5 text-emerald-500" aria-hidden="true" /><span className="text-emerald-600">Draft copied</span></>
       ) : (
-        <><Copy className="w-3.5 h-3.5 text-text-2" /><span className="text-text-2">Copy</span></>
+        <><Copy className="w-3.5 h-3.5 text-text-2" aria-hidden="true" /><span className="text-text-2">Copy draft</span></>
       )}
     </button>
   );
 }
 
-/** Confidence formula chip for the breakdown visualisation. */
-function BreakdownChip({
-  label,
-  value,
-  sublabel,
-  highlight,
-  tintVar,
-  colorVar,
-}) {
+/** Missing or contradictory validation metadata must never imply successful checks. */
+function SourceChecks({ validation }) {
+  const errors = Array.isArray(validation?.errors) ? validation.errors : [];
+  const passed = validation?.status === 'PASSED' && validation.passed === true && errors.length === 0;
+  let label = 'Not run';
+  let color = 'var(--text-2)';
+
+  if (passed) {
+    label = 'Passed for the reported source checks';
+    color = 'var(--emerald-base)';
+  } else if (validation?.status === 'PASSED') {
+    label = 'Inconsistent result — pass not confirmed';
+    color = 'var(--rose-base)';
+  } else if (validation?.status === 'FAILED') {
+    label = 'Failed';
+    color = 'var(--rose-base)';
+  } else if (validation?.status === 'PARTIAL') {
+    label = 'Partial — source checks incomplete';
+    color = 'var(--amber-base)';
+  } else if (validation?.status === 'NOT_APPLICABLE') {
+    label = 'Not applicable';
+  }
+
+  const countLabel = (value) => Number.isInteger(value) && value >= 0 ? value : 'Not reported';
+
   return (
-    <div
-      className="px-3 py-1.5 rounded-badge text-center"
-      style={{
-        background: highlight ? `var(${tintVar})` : 'var(--surface-2)',
-        color: highlight ? `var(${colorVar})` : 'var(--text-3)',
-      }}
+    <AccordionSection
+      title="Source checks"
+      count={errors.length}
+      defaultOpen
+      icon={passed ? ShieldCheck : FileSearch}
+      accentColor={color}
     >
-      <div className="font-bold text-base">{value}</div>
-      <div className="text-[9px] uppercase tracking-wider">{label}</div>
-      <div className="text-[8px] opacity-70 truncate max-w-[80px]">
-        {sublabel}
+      <div role="status" className="text-sm font-medium" style={{ color }} data-testid="validation-status">
+        {label}
       </div>
-    </div>
+      <p className="text-xs font-mono text-text-2" data-testid="validation-coverage">
+        Checked: {countLabel(validation?.checked_count)} · Eligible: {countLabel(validation?.eligible_count)}
+      </p>
+      <p className="text-xs text-text-2">
+        Source checks cover only the reported scope; they do not establish narrative accuracy or legal compliance.
+      </p>
+      {validation?.validator_version && (
+        <p className="text-xs font-mono text-text-2">Validator version: {validation.validator_version}</p>
+      )}
+      {validation?.artifact_digest && (
+        <p className="text-xs font-mono text-text-2 break-all">Artifact digest: {validation.artifact_digest}</p>
+      )}
+      {errors.length > 0 && (
+        <ul aria-label="Source check errors" className="space-y-1">
+          {errors.map((error, i) => (
+            <li key={i} className="p-2 bg-rose-50 rounded text-xs font-mono text-rose-800">
+              {typeof error === 'string' ? error : JSON.stringify(error)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </AccordionSection>
+  );
+}
+
+/** Explicit analysis coverage & limitations — partial coverage is never a clean negative. */
+function AnalysisCoverage({ coverage, typology }) {
+  const status = coverage?.status || 'NOT_REPORTED';
+  const limitations = Array.isArray(coverage?.limitations) ? coverage.limitations : [];
+  let label = 'Coverage not reported';
+  let color = 'var(--text-2)';
+
+  if (status === 'COMPLETE' && limitations.length === 0) {
+    label = 'Complete within declared search scope';
+    color = 'var(--emerald-base)';
+  } else if (status === 'PARTIAL' || limitations.length > 0) {
+    label = 'Partial — traversal or scope limits were reached';
+    color = 'var(--amber-base)';
+  } else if (status === 'NOT_EVALUATED' || status === 'FAILED') {
+    label = 'Not evaluated';
+    color = 'var(--rose-base)';
+  }
+
+  return (
+    <AccordionSection
+      title="Analysis coverage"
+      count={limitations.length}
+      defaultOpen={status !== 'COMPLETE' || limitations.length > 0}
+      icon={limitations.length > 0 ? AlertTriangle : FileSearch}
+      accentColor={color}
+    >
+      <div role="status" className="text-sm font-medium" style={{ color }} data-testid="coverage-status">
+        {label}
+      </div>
+      <p className="text-xs text-text-2 mt-1">
+        {typology === 'NONE'
+          ? 'No qualifying pattern found within this declared scope. This does not clear a customer or establish compliance.'
+          : 'Coverage reflects only the declared graph/window scope; partial coverage cannot establish a negative finding.'}
+      </p>
+      {limitations.length > 0 && (
+        <ul aria-label="Coverage limitations" className="space-y-1 mt-2" data-testid="coverage-limitations">
+          {limitations.map((item, i) => (
+            <li key={i} className="p-2 bg-amber-50 rounded text-xs font-mono text-amber-900">
+              {typeof item === 'string'
+                ? item
+                : `${item.reason || 'LIMIT'}: node ${item.node ?? 'unknown'} (limit ${item.limit ?? 'n/a'})`}
+            </li>
+          ))}
+        </ul>
+      )}
+    </AccordionSection>
   );
 }

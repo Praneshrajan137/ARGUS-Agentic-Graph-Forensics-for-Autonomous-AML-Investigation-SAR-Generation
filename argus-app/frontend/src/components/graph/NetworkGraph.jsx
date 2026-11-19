@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import * as d3 from 'd3';
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Table2, Network } from 'lucide-react';
 
 // ═══ THEME COLOR READER — reads CSS custom properties for Canvas rendering ═══
 function getThemeColors() {
@@ -103,10 +103,7 @@ const NetworkGraph = forwardRef(function NetworkGraph({ nodes, edges, onNodeSele
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const w = rect.width;
-    const h = rect.height;
 
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -374,13 +371,6 @@ const NetworkGraph = forwardRef(function NetworkGraph({ nodes, edges, onNodeSele
     };
   }, [nodes, edges, onNodeSelect, renderFrame]);
 
-  // Expose zoom controls via ref for keyboard shortcuts
-  useImperativeHandle(ref, () => ({
-    zoomIn: () => handleZoomIn(),
-    zoomOut: () => handleZoomOut(),
-    fitView: () => handleFitView(),
-  }));
-
   // ── Zoom controls ──
   const handleZoomIn = () => {
     const canvas = canvasRef.current;
@@ -401,19 +391,66 @@ const NetworkGraph = forwardRef(function NetworkGraph({ nodes, edges, onNodeSele
     );
   };
 
+  // Expose zoom controls via ref for keyboard shortcuts
+  useImperativeHandle(ref, () => ({
+    zoomIn: () => handleZoomIn(),
+    zoomOut: () => handleZoomOut(),
+    fitView: () => handleFitView(),
+  }));
+
+  const [viewMode, setViewMode] = useState('graph');
+
   return (
     <div ref={containerRef} className="relative w-full h-full">
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full"
-        style={{ display: 'block' }}
-        role="img"
-        aria-label="Interactive financial network graph. Click nodes to select, double-click to investigate. Scroll to zoom, drag to pan."
-        tabIndex={0}
-      />
+      {viewMode === 'table' ? (
+        <div
+          className="w-full h-full overflow-auto bg-surface-0 p-4 pt-14"
+          data-testid="network-graph-table"
+        >
+          <table className="w-full text-left text-xs border-collapse" aria-label="Accessible network graph nodes table">
+            <thead>
+              <tr className="border-b border-surface-3 text-text-2 uppercase">
+                <th className="py-2 pr-3">Account / Node ID</th>
+                <th className="py-2 pr-3">Name</th>
+                <th className="py-2 pr-3">Type</th>
+                <th className="py-2 pr-3">Group</th>
+                <th className="py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(nodes || []).slice(0, 250).map((n) => (
+                <tr key={n.id} className="border-b border-surface-2">
+                  <td className="py-2 pr-3 font-mono font-semibold text-text-0">{n.id}</td>
+                  <td className="py-2 pr-3 text-text-1">{n.name || '—'}</td>
+                  <td className="py-2 pr-3 font-mono text-text-2">{n.entity_type || 'unknown'}</td>
+                  <td className="py-2 pr-3 font-mono text-text-2">{n.group || 'other'}</td>
+                  <td className="py-2">
+                    <button
+                      type="button"
+                      onClick={() => onNodeSelect?.(n.id)}
+                      className="px-2 py-1 text-accent underline font-semibold"
+                    >
+                      Inspect
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full"
+          style={{ display: 'block' }}
+          role="img"
+          aria-label="Interactive financial network graph. Use Table View for full keyboard navigation."
+          tabIndex={0}
+        />
+      )}
 
       {/* Tooltip */}
-      {hoveredNode && (
+      {viewMode === 'graph' && hoveredNode && (
         <div
           className="absolute pointer-events-none z-10 bg-surface-0 border border-surface-3 shadow-md rounded-lg px-3 py-2 text-xs"
           style={{
@@ -428,45 +465,70 @@ const NetworkGraph = forwardRef(function NetworkGraph({ nodes, edges, onNodeSele
       )}
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg p-3 text-xs space-y-1.5">
-        {[
-          { color: COLORS.surface3, label: 'Legitimate', r: 3 },
-          { color: COLORS.amberBase, label: 'Structuring Source', r: 5 },
-          { color: COLORS.roseBase, label: 'Mule (Criminal)', r: 8 },
-          { color: COLORS.violetBase, label: 'Layering', r: 5 },
-        ].map(({ color, label, r }) => (
-          <div key={label} className="flex items-center gap-2">
-            <svg width={r * 2 + 4} height={r * 2 + 4}>
-              <circle cx={r + 2} cy={r + 2} r={r} fill={color} />
-            </svg>
-            <span className="text-text-2">{label}</span>
-          </div>
-        ))}
-      </div>
+      {viewMode === 'graph' && (
+        <div className="absolute bottom-4 left-4 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg p-3 text-xs space-y-1.5">
+          {[
+            { color: COLORS.surface3, label: 'Other Accounts', r: 3 },
+            { color: COLORS.amberBase, label: 'Structuring Counterparty', r: 5 },
+            { color: COLORS.roseBase, label: 'Structuring Focus Account', r: 8 },
+            { color: COLORS.violetBase, label: 'Layering Chain Account', r: 5 },
+          ].map(({ color, label, r }) => (
+            <div key={label} className="flex items-center gap-2">
+              <svg width={r * 2 + 4} height={r * 2 + 4} aria-hidden="true">
+                <circle cx={r + 2} cy={r + 2} r={r} fill={color} />
+              </svg>
+              <span className="text-text-2">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Zoom Controls */}
+      {/* View Toggle & Zoom Controls */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
         <button
-          onClick={handleZoomIn}
-          className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
-          title="Zoom In"
+          type="button"
+          onClick={() => setViewMode((m) => (m === 'graph' ? 'table' : 'graph'))}
+          className="inline-flex items-center gap-1.5 px-3 py-2 bg-surface-0/95 border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors text-xs font-semibold text-text-1"
+          aria-pressed={viewMode === 'table'}
+          data-testid="toggle-graph-table-btn"
         >
-          <ZoomIn className="w-4 h-4 text-text-2" />
+          {viewMode === 'graph' ? (
+            <><Table2 className="w-4 h-4" aria-hidden="true" /> Table View</>
+          ) : (
+            <><Network className="w-4 h-4" aria-hidden="true" /> Graph View</>
+          )}
         </button>
-        <button
-          onClick={handleZoomOut}
-          className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
-          title="Zoom Out"
-        >
-          <ZoomOut className="w-4 h-4 text-text-2" />
-        </button>
-        <button
-          onClick={handleFitView}
-          className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
-          title="Fit View"
-        >
-          <Maximize2 className="w-4 h-4 text-text-2" />
-        </button>
+        {viewMode === 'graph' && (
+          <>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
+              title="Zoom In"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-4 h-4 text-text-2" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
+              title="Zoom Out"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="w-4 h-4 text-text-2" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={handleFitView}
+              className="p-2 bg-surface-0/90 backdrop-blur-sm border border-surface-3 rounded-lg hover:bg-surface-2 transition-colors"
+              title="Fit View"
+              aria-label="Fit View"
+            >
+              <Maximize2 className="w-4 h-4 text-text-2" aria-hidden="true" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

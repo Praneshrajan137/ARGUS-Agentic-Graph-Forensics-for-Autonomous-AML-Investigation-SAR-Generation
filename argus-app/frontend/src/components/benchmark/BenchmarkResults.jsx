@@ -229,7 +229,7 @@ function ResultsTable({ nodeResults }) {
 }
 
 export default function BenchmarkResults({ benchmark, onReset }) {
-  const { aggregate, node_results, config, started_at, completed_at } = benchmark;
+  const { aggregate, node_results, config } = benchmark;
 
   if (!aggregate) return null;
 

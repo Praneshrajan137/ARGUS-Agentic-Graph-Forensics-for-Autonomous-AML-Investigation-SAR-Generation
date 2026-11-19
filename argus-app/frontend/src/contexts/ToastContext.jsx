@@ -30,8 +30,9 @@ export function ToastProvider({ children }) {
   }, [removeToast]);
 
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      Object.values(timersRef.current).forEach(clearTimeout);
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 

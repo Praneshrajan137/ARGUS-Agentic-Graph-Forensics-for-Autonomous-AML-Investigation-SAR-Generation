@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import ErrorCard from '@/components/shared/ErrorCard';
@@ -12,7 +12,8 @@ import { FileText } from 'lucide-react';
 
 export default function SARViewer() {
   const [searchParams] = useSearchParams();
-  const [selectedCaseId, setSelectedCaseId] = useState(searchParams.get('case_id') || null);
+  const [manualCaseId, setManualCaseId] = useState(null);
+  const selectedCaseId = manualCaseId ?? searchParams.get('case_id') ?? null;
 
   const { data: investigations, loading, error, refetch } = useQuery(
     'investigations', getInvestigations
@@ -24,16 +25,10 @@ export default function SARViewer() {
     { enabled: !!selectedCaseId }
   );
 
-  // Auto-select from URL param
-  useEffect(() => {
-    const caseId = searchParams.get('case_id');
-    if (caseId) setSelectedCaseId(caseId);
-  }, [searchParams]);
-
   if (loading) {
     return (
       <div>
-        <PageHeader title="SAR Viewer" subtitle="Dual-jurisdiction regulatory reports" />
+        <PageHeader title="Draft Narrative Viewer" subtitle="Draft narratives for review — not filed" />
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size={32} />
         </div>
@@ -44,7 +39,7 @@ export default function SARViewer() {
   if (error) {
     return (
       <div>
-        <PageHeader title="SAR Viewer" subtitle="Dual-jurisdiction regulatory reports" />
+        <PageHeader title="Draft Narrative Viewer" subtitle="Draft narratives for review — not filed" />
         <ErrorCard error={error} onRetry={refetch} />
       </div>
     );
@@ -56,7 +51,7 @@ export default function SARViewer() {
   if (sarInvestigations.length === 0) {
     return (
       <div>
-        <PageHeader title="SAR Viewer" subtitle="Dual-jurisdiction regulatory reports" />
+        <PageHeader title="Draft Narrative Viewer" subtitle="Draft narratives for review — not filed" />
         <EmptyState
           icon={FileText}
           title="No SAR Reports"
@@ -79,7 +74,7 @@ export default function SARViewer() {
         <InvestigationListPanel
           investigations={sarInvestigations}
           selectedId={selectedCaseId}
-          onSelect={setSelectedCaseId}
+          onSelect={setManualCaseId}
         />
         <div className="flex-1 overflow-y-auto p-6">
           {selectedCaseId && detailLoading ? (

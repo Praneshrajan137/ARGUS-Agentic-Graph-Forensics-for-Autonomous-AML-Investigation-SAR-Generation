@@ -20,7 +20,7 @@ describe('AnimatedNumber', () => {
   });
 
   it('accepts a custom className via wrapper', () => {
-    const { container } = render(
+    render(
       <span data-testid="wrapper" className="font-mono">
         <AnimatedNumber value={42} />
       </span>

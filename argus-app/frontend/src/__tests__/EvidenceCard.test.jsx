@@ -7,7 +7,9 @@ import EvidenceCard from '@/components/evidence/EvidenceCard';
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }) => {
-      const { whileHover, transition, variants, initial, animate, ...rest } = props;
+      const rest = Object.fromEntries(
+        Object.entries(props).filter(([k]) => !['whileHover', 'transition', 'variants', 'initial', 'animate'].includes(k))
+      );
       return <div {...rest}>{children}</div>;
     },
   },

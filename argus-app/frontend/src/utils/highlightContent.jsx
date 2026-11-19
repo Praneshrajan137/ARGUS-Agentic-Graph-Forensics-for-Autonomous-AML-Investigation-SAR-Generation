@@ -3,11 +3,11 @@
  * Returns an array of React elements (strings and <span> elements).
  * SAFE: uses React elements, NOT dangerouslySetInnerHTML.
  */
-export function highlightContent(text, knownEntityIds = []) {
+export function highlightContent(text, _knownEntityIds = []) {
   if (!text) return [text];
 
   // Pattern: $X,XXX.XX or ₹X,XX,XXX.XX or plain numbers with decimal
-  const amountRegex = /[\$₹][\d,]+\.?\d{0,2}/g;
+  const amountRegex = /[$₹][\d,]+\.?\d{0,2}/g;
   // Pattern: dates like 2024-01-15 or 01/15/2024
   const dateRegex = /\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/g;
 

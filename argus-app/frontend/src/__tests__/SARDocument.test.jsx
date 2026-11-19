@@ -1,16 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import SARDocument from '@/components/sar/SARDocument';
 
-// Mock framer-motion
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => {
-      const { variants, initial, animate, whileHover, ...rest } = props;
-      return <div {...rest}>{children}</div>;
-    },
-  },
-}));
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 const fincenInvestigation = {
   case_id: 'ARGUS-TEST-001',
@@ -57,14 +54,17 @@ describe('SARDocument', () => {
   });
 
   describe('FinCEN SAR (US jurisdiction)', () => {
-    it('renders the FinCEN header', () => {
+    it('renders a draft header, not a filed report', () => {
       render(<SARDocument investigation={fincenInvestigation} />);
-      expect(screen.getByText('FinCEN Suspicious Activity Report')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Draft investigation narrative' })).toBeInTheDocument();
+      expect(screen.getByText('Not submitted to FinCEN.')).toBeInTheDocument();
+      expect(screen.getByText('Draft — for review')).toBeInTheDocument();
     });
 
-    it('displays BSA citation', () => {
+    it('displays BSA as preparation context without claiming legal compliance', () => {
       render(<SARDocument investigation={fincenInvestigation} />);
-      expect(screen.getByText(/Bank Secrecy Act/)).toBeInTheDocument();
+      expect(screen.getByText('Prepared under Bank Secrecy Act (31 U.S.C. § 5318) for review—not filed.')).toBeInTheDocument();
+      expect(screen.getByText(/this draft does not establish legal compliance/)).toBeInTheDocument();
     });
 
     it('renders the case ID in metadata', () => {
@@ -72,9 +72,13 @@ describe('SARDocument', () => {
       expect(screen.getByText('ARGUS-TEST-001')).toBeInTheDocument();
     });
 
-    it('renders confidence as percentage', () => {
-      render(<SARDocument investigation={fincenInvestigation} />);
-      expect(screen.getByText('87%')).toBeInTheDocument();
+    it('omits confidence percentages and affirmative filing labels', () => {
+      const { container } = render(<SARDocument investigation={fincenInvestigation} />);
+      expect(screen.queryByText('Confidence')).not.toBeInTheDocument();
+      expect(screen.queryByText('Filing Date')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Filed/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /approve|submit|file report/i })).not.toBeInTheDocument();
+      expect(container.textContent).not.toMatch(/\d+%|Filed pursuant to/);
     });
 
     it('renders United States as jurisdiction', () => {
@@ -89,9 +93,12 @@ describe('SARDocument', () => {
   });
 
   describe('FIU-IND STR (India jurisdiction)', () => {
-    it('renders FIU-IND header', () => {
+    it('keeps FIU-IND preparation a draft with no submission claim', () => {
       render(<SARDocument investigation={fiuIndInvestigation} />);
-      expect(screen.getByText('FIU-IND Suspicious Transaction Report')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Draft investigation narrative' })).toBeInTheDocument();
+      expect(screen.getByText('Not submitted to FinCEN. Not submitted to FIU-IND.')).toBeInTheDocument();
+      expect(screen.queryByText('Filing Date')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Filed/)).not.toBeInTheDocument();
     });
 
     it('displays PMLA citation', () => {
@@ -178,7 +185,112 @@ describe('SARDocument', () => {
     it('has role="document" with aria-label', () => {
       render(<SARDocument investigation={fincenInvestigation} />);
       const doc = screen.getByRole('document');
-      expect(doc).toHaveAttribute('aria-label', 'SAR Report ARGUS-TEST-001');
+      expect(doc).toHaveAttribute('aria-label', 'Draft investigation narrative ARGUS-TEST-001');
+    });
+  });
+
+  describe('Persisted artifact metadata', () => {
+    it('prefers epoch seconds and keeps historical metadata stable across later views', () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-01T00:00:00Z'));
+      const investigation = {
+        ...fincenInvestigation,
+        investigation_timestamp: Date.parse('2020-02-03T04:05:06Z') / 1000,
+      };
+      const { rerender } = render(<SARDocument investigation={investigation} />);
+      expect(screen.getByText('Created (UTC)')).toBeInTheDocument();
+      expect(screen.getByTestId('investigation-created-at')).toHaveAttribute('datetime', '2020-02-03T04:05:06.000Z');
+      expect(screen.getByTestId('investigation-created-at')).toHaveTextContent('Mon, 03 Feb 2020 04:05:06 GMT');
+      const originalText = screen.getByRole('document').textContent;
+      vi.setSystemTime(new Date('2035-12-31T23:59:59Z'));
+      rerender(<SARDocument investigation={{ ...investigation }} />);
+      expect(screen.getByRole('document').textContent).toBe(originalText);
+      expect(originalText).not.toMatch(/2026|2035|ARGUS v1\.0\.0|TRACER v7\.0\.0|Generated by/);
+    });
+
+    it('falls back to persisted investigation_start when epoch is absent', () => {
+      render(<SARDocument investigation={fincenInvestigation} />);
+      expect(screen.getByTestId('investigation-created-at')).toHaveAttribute('datetime', '2024-06-15T10:30:00.000Z');
+    });
+
+    it.each([NaN, Infinity, 1e100, 'not-a-timestamp'])(
+      'falls back to persisted start for invalid epoch %s', (investigation_timestamp) => {
+        render(<SARDocument investigation={{ ...fincenInvestigation, investigation_timestamp }} />);
+        expect(screen.getByTestId('investigation-created-at')).toHaveAttribute('datetime', '2024-06-15T10:30:00.000Z');
+      }
+    );
+
+    it('preserves epoch zero instead of treating it as missing', () => {
+      render(<SARDocument investigation={{ ...fincenInvestigation, investigation_timestamp: 0 }} />);
+      expect(screen.getByTestId('investigation-created-at')).toHaveAttribute('datetime', '1970-01-01T00:00:00.000Z');
+    });
+
+    it.each([undefined, null, '', 'invalid-date'])(
+      'does not invent a creation date when persisted timestamps are unavailable: %s', (investigation_start) => {
+        render(<SARDocument investigation={{ ...fincenInvestigation, investigation_start }} />);
+        expect(screen.getByText('Not available')).toBeInTheDocument();
+        expect(screen.queryByTestId('investigation-created-at')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Invalid Date|Generated by/)).not.toBeInTheDocument();
+      }
+    );
+
+    it('does not assign activity timestamps a timezone based on jurisdiction', () => {
+      render(<SARDocument investigation={fiuIndInvestigation} />);
+      expect(screen.getByText(fiuIndInvestigation.sar_draft.when)).toBeInTheDocument();
+      expect(screen.queryByText(/All timestamps in/)).not.toBeInTheDocument();
+      expect(screen.getByTestId('investigation-created-at')).toHaveAttribute('datetime', '2024-03-20T14:00:00.000Z');
+    });
+  });
+
+  describe('Unknown geography', () => {
+    it.each(['fincen', 'fiu_ind', undefined])(
+      'does not infer an activity location from reporting jurisdiction %s', (jurisdiction) => {
+        render(<SARDocument investigation={{ ...fincenInvestigation, jurisdiction, sar_draft: {} }} />);
+        expect(screen.getByText('Unknown — geographic information not provided')).toBeInTheDocument();
+      }
+    );
+
+    it('treats blank geography as unknown', () => {
+      render(<SARDocument investigation={{ ...fincenInvestigation, sar_draft: { where: '   ' } }} />);
+      expect(screen.getByText('Unknown — geographic information not provided')).toBeInTheDocument();
+    });
+
+    it('preserves an explicitly unknown source location', () => {
+      render(<SARDocument investigation={{ ...fincenInvestigation, sar_draft: { where: 'Unknown' } }} />);
+      expect(screen.getByText('Unknown')).toBeInTheDocument();
+    });
+
+    it('does not assume US regulatory context for missing jurisdiction', () => {
+      render(<SARDocument investigation={{ ...fincenInvestigation, jurisdiction: undefined, sar_draft: {} }} />);
+      expect(screen.getByText('Unknown')).toBeInTheDocument();
+      expect(screen.getByText('Prepared for review—not filed. Regulatory context not provided.')).toBeInTheDocument();
+      expect(screen.queryByText('United States')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Bank Secrecy Act/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Draft copy', () => {
+    it.each([fincenInvestigation, fiuIndInvestigation])(
+      'copies a clearly labeled draft for $jurisdiction without submission or approval actions', async (investigation) => {
+        const user = userEvent.setup();
+        const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+        render(<SARDocument investigation={investigation} />);
+        await user.click(screen.getByRole('button', { name: 'Copy draft' }));
+        const notice = investigation.jurisdiction === 'fiu_ind'
+          ? 'Not submitted to FinCEN. Not submitted to FIU-IND.'
+          : 'Not submitted to FinCEN.';
+        expect(writeText).toHaveBeenCalledWith(
+          `Draft investigation narrative\n${notice} For review only.\n\n${investigation.sar_narrative}`
+        );
+        expect(screen.getByRole('button', { name: 'Draft copied' })).toHaveAttribute('aria-live', 'polite');
+        expect(screen.queryByRole('button', { name: /approve|submit|file report/i })).not.toBeInTheDocument();
+      }
+    );
+
+    it('has no copy action when no draft narrative is supplied', () => {
+      render(<SARDocument investigation={{ ...fincenInvestigation, sar_narrative: '' }} />);
+      expect(screen.getByText('No draft narrative available.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copy draft' })).not.toBeInTheDocument();
     });
   });
 

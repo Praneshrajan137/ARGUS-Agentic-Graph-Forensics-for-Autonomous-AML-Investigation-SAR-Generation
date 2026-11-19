@@ -20,12 +20,13 @@ function formatDuration(ms) {
 export default function BenchmarkProgress({ benchmarkId, onComplete }) {
   const [progress, setProgress] = useState(null);
   const [elapsed, setElapsed] = useState(0);
-  const startTime = useRef(Date.now());
+  const startTime = useRef(0);
   const intervalRef = useRef(null);
   const timerRef = useRef(null);
 
   useEffect(() => {
     if (!benchmarkId) return;
+    startTime.current = Date.now();
 
     // Poll progress every 1.5 seconds
     const poll = async () => {

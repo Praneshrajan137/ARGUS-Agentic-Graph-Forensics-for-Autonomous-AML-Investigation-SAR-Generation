@@ -128,11 +128,41 @@ body::before {
 .font-display { font-family: 'Instrument Serif', Georgia, serif; }
 .font-data { font-family: 'JetBrains Mono', Consolas, monospace; }
 
-/* ═══ FOCUS RING ═══ */
+/* ═══ FOCUS RING & WCAG 2.2 AA ACCESSIBILITY ═══ */
 :focus-visible {
   outline: 2px solid var(--accent-base);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--accent-base);
+  color: #ffffff;
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: 0.75rem;
+  top: 0.75rem;
+  border-radius: 6px;
+}
+
+button, a, [role="button"] {
+  min-height: 24px;
+  min-width: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ═══ SELECTION ═══ */

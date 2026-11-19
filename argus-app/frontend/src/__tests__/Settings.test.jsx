@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Settings from '@/pages/Settings';
+import { ToastProvider } from '@/contexts/ToastContext';
 
 // Use vi.hoisted to define mock data that vi.mock factories can reference
 const { mockHealth, mockConfig } = vi.hoisted(() => ({
@@ -24,6 +25,8 @@ const { mockHealth, mockConfig } = vi.hoisted(() => ({
 
 vi.mock('@/api/client', () => ({
   getConfig: vi.fn().mockResolvedValue(mockConfig),
+  getAgentConfig: vi.fn().mockResolvedValue({}),
+  getAgentCard: vi.fn().mockResolvedValue({}),
   getHealth: vi.fn().mockResolvedValue(mockHealth),
   generateWorld: vi.fn().mockResolvedValue({ status: 'ok' }),
   resetState: vi.fn().mockResolvedValue({ status: 'ok' }),
@@ -47,7 +50,7 @@ vi.mock('react-router-dom', async () => {
 const renderPage = () =>
   render(
     <MemoryRouter>
-      <Settings />
+      <ToastProvider><Settings /></ToastProvider>
     </MemoryRouter>
   );
 

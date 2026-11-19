@@ -45,7 +45,7 @@ const DIFFICULTY_LABELS = {
 export default function Settings() {
   const navigate = useNavigate();
   const { addToast } = useToast();
-  const { data: config } = useQuery('config', getConfig);
+  useQuery('config', getConfig);
   const { data: health } = useQuery('health-settings', getHealth);
   const { data: agentConfig } = useQuery('agent-config', getAgentConfig);
   const { data: agentCard } = useQuery('agent-card', getAgentCard);

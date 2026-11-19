@@ -29,10 +29,10 @@ function HeroBanner() {
           <div>
             <h1 className="font-display text-4xl text-text-0 tracking-tight leading-none">ARGUS</h1>
             <p className="font-mono text-[11px] tracking-widest uppercase text-accent/70 mt-1.5">
-              Agentic Graph Forensics for Autonomous AML Investigation &amp; SAR Generation
+              Graph Forensics Investigation &amp; Review Workbench (Synthetic Research Runtime)
             </p>
             <p className="text-sm text-text-2 mt-2">
-              Autonomous financial crime detection powered by graph intelligence
+              Evidence-linked pattern analysis for synthetic research scenarios
             </p>
           </div>
         </div>
@@ -143,7 +143,7 @@ export default function Dashboard() {
                   </div>
                   {crime.metadata?.mule_id != null && (
                     <p className="text-sm text-text-2">
-                      Mule: <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.mule_id}</span>
+                      Focus Account: <span className="font-mono font-medium" style={{ color: 'var(--rose-base)' }}>{crime.metadata.mule_id}</span>
                     </p>
                   )}
                   {crime.metadata?.total_amount != null && (
