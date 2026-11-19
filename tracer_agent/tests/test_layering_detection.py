@@ -13,7 +13,10 @@ Tests cover:
   - v8.0: Mixed currency chain rejection, currency recorded in result
 """
 from decimal import Decimal
+from itertools import permutations
+from random import Random
 
+import pytest
 
 from tracer_agent.src.core.graph_reasoner import GraphReasoner
 from tracer_agent.src.core.heuristics.layering import detect_layering
@@ -275,3 +278,170 @@ class TestV8Enhancements:
         for chain in result.chains:
             assert chain.currency == "USD"
         assert result.currency == "USD"
+
+
+def _chain_event(tx_id, source, target, amount, timestamp, currency="USD"):
+    return {
+        "id": tx_id, "source_node": source, "target_node": target,
+        "amount": Decimal(amount), "timestamp": 1700000000 + timestamp,
+        "currency": currency,
+    }
+
+
+def _prefix_events():
+    return [
+        _chain_event("a", "A", "B", "100000", 0),
+        _chain_event("b", "B", "C", "97000", 10),
+        _chain_event("c", "C", "D", "94090", 20),
+    ]
+
+
+def _cited_sequences(result):
+    return [tuple(tx["tx_id"] for tx in chain.chain_transactions) for chain in result.chains]
+
+
+def _brute_force_layering(events, start, max_depth, currency=None):
+    """Exhaust all event permutations, independently of DFS and analyzer."""
+    from tracer_agent.src.config import (
+        DECAY_RATE_MIN, DECAY_RATE_MAX, DECAY_TOLERANCE, MAX_HOP_DELAY_SECONDS,
+    )
+
+    valid = set()
+    for length in range(MIN_CHAIN_LENGTH, min(max_depth, len(events)) + 1):
+        for chain in permutations(events, length):
+            if chain[0]["source_node"] != start:
+                continue
+            if any(a["target_node"] != b["source_node"] for a, b in zip(chain, chain[1:])):
+                continue
+            nodes = [start] + [event["target_node"] for event in chain]
+            if len(nodes) != len(set(nodes)):
+                continue
+            currencies = {event["currency"] for event in chain}
+            if len(currencies) != 1 or (currency is not None and currencies != {currency}):
+                continue
+            valid_hops = True
+            for a, b in zip(chain, chain[1:]):
+                if not 0 <= b["timestamp"] - a["timestamp"] <= MAX_HOP_DELAY_SECONDS:
+                    valid_hops = False
+                    break
+                if a["amount"] <= 0:
+                    valid_hops = False
+                    break
+                decay = (a["amount"] - b["amount"]) / a["amount"]
+                if not DECAY_RATE_MIN - DECAY_TOLERANCE <= decay <= DECAY_RATE_MAX + DECAY_TOLERANCE:
+                    valid_hops = False
+                    break
+            if valid_hops:
+                valid.add(tuple(event["id"] for event in chain))
+    # A valid extension already cites its prefix: keep only maximal evidence.
+    return sorted(sequence for sequence in valid if not any(
+        len(other) > len(sequence) and other[:len(sequence)] == sequence for other in valid
+    ))
+
+
+class TestChronologicalSubchains:
+    def test_reverse_timestamps_are_not_layering(self):
+        events = _prefix_events()
+        for i, event in enumerate(events):
+            event["timestamp"] = 1700000020 - i * 10
+        assert not detect_layering(_load({"transactions": events}), "A").detected
+
+    @pytest.mark.parametrize("gap, expected", [(0, True), (43200, True), (43201, False), (-1, False)])
+    def test_signed_hop_delay_boundaries(self, gap, expected):
+        events = _prefix_events()
+        for i, event in enumerate(events):
+            event["timestamp"] = 1700100000 + i * gap
+        assert detect_layering(_load({"transactions": events}), "A").detected is expected
+
+    @pytest.mark.parametrize("tail", [
+        _chain_event("tail", "D", "E", "1", 30),
+        _chain_event("tail", "D", "E", "91267.3", 19),
+        _chain_event("tail", "D", "E", "91267.3", 86400),
+        _chain_event("tail", "D", "E", "91267.3", 30, "INR"),
+    ])
+    def test_valid_prefix_survives_irrelevant_tail(self, tail):
+        result = detect_layering(_load({"transactions": _prefix_events() + [tail]}), "A")
+        assert result.detected
+        assert _cited_sequences(result) == [("a", "b", "c")]
+        assert result.chains[0].end_amount == Decimal("94090")
+        assert result.chains[0].hop_count == MIN_CHAIN_LENGTH
+
+    def test_branching_bad_tails_do_not_duplicate_same_prefix(self):
+        events = _prefix_events() + [
+            _chain_event("tail_x", "D", "E", "1", 30),
+            _chain_event("tail_y", "D", "F", "2", 30),
+        ]
+        result = detect_layering(_load({"transactions": events}), "A")
+        assert _cited_sequences(result) == [("a", "b", "c")]
+        assert result.total_chains_found == 1
+
+    def test_parallel_equal_amount_events_are_not_collapsed(self):
+        events = _prefix_events() + [_chain_event("b_parallel", "B", "C", "97000", 10)]
+        result = detect_layering(_load({"transactions": events}), "A")
+        assert _cited_sequences(result) == [("a", "b", "c"), ("a", "b_parallel", "c")]
+
+    def test_prefix_already_cited_by_valid_extension_is_not_duplicated(self):
+        events = _prefix_events() + [
+            _chain_event("good", "D", "E", "91267.3", 30),
+            _chain_event("bad", "D", "F", "1", 30),
+        ]
+        result = detect_layering(_load({"transactions": events}), "A")
+        assert _cited_sequences(result) == [("a", "b", "c", "good")]
+
+    @pytest.mark.parametrize("max_depth", [2, 3, 4, 5])
+    @pytest.mark.parametrize("currency", [None, "USD", "INR"])
+    def test_brute_force_oracle_with_parallel_events_cycles_and_bad_tail(self, max_depth, currency):
+        events = _prefix_events() + [
+            _chain_event("parallel", "B", "C", "97000", 10),
+            _chain_event("good", "D", "E", "91267.3", 30),
+            _chain_event("backwards", "D", "F", "91267.3", 19),
+            _chain_event("cycle", "D", "A", "91267.3", 30),
+        ]
+        expected = _brute_force_layering(events, "A", max_depth, currency)
+        for seed in range(3):
+            shuffled = list(events)
+            Random(seed).shuffle(shuffled)
+            result = detect_layering(_load({"transactions": shuffled}), "A", max_depth, currency)
+            assert _cited_sequences(result) == expected
+            assert result.total_chains_found == len(expected)
+            assert result.detected is bool(expected)
+
+    def test_seeded_mixed_currency_graphs_match_independent_oracle(self):
+        rng = Random(143)
+        for _ in range(25):
+            events = _prefix_events() + [
+                _chain_event("parallel", "B", "C", "97000", 10),
+                _chain_event("tail", "D", "E", "91267.3", 30),
+            ]
+            for event in events:
+                event["timestamp"] += rng.choice([-30, 0, 0, 10])
+                event["currency"] = rng.choice(["USD", "USD", "USD", "INR"])
+                event["amount"] *= rng.choice([Decimal("1"), Decimal("1"), Decimal("2")])
+            expected = _brute_force_layering(events, "A", 4)
+            result = detect_layering(_load({"transactions": events}), "A", 4)
+            assert _cited_sequences(result) == expected
+
+    def test_constraint_pruning_preserves_valid_chain_under_path_cap_noise(self, monkeypatch):
+        import tracer_agent.src.core.graph_reasoner as gr_mod
+        monkeypatch.setattr(gr_mod, "MAX_PATHS_PER_SEARCH", 5)
+        # 20 non-decaying noise branches sorted alphabetically BEFORE the valid chain
+        events = [
+            _chain_event(f"00_noise_{i:02d}", "A", f"N{i}", "5000", 0)
+            for i in range(20)
+        ] + [
+            _chain_event("z1", "A", "B", "100000", 0),
+            _chain_event("z2", "B", "C", "97000", 10),
+            _chain_event("z3", "C", "D", "94090", 20),
+        ]
+        gr_pruned = _load({"transactions": events})
+        res_pruned = detect_layering(gr_pruned, "A", max_depth=4, prune_constraints=True)
+        # Constraint pruning still finds the valid chain (or at minimum doesn't waste hops expanding invalid tails)
+        assert _cited_sequences(res_pruned) == [("z1", "z2", "z3")]
+
+    def test_expired_deadline_marks_coverage_partial(self):
+        import time
+        gr = _load({"transactions": _prefix_events()})
+        result = detect_layering(gr, "A", max_depth=4, deadline_monotonic=time.monotonic() - 1.0)
+        assert result.detected is False
+        assert gr.coverage["status"] == "PARTIAL"
+        assert any(lim["reason"] == "DEADLINE_EXCEEDED" for lim in gr.coverage["limitations"])

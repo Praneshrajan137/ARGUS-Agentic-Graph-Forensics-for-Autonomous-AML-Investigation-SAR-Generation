@@ -83,21 +83,17 @@ def _calculate_hop_decay(amount_in: Decimal, amount_out: Decimal) -> Decimal | N
         return None
 
 
-def _analyze_chain(chain: list[dict]) -> LayeringChain | None:
-    """
-    Analyze a single DFS chain for layering characteristics.
-
-    v8.0 [P4v8-05]: Validates currency consistency across all transactions.
-    Mixed-currency chains (e.g., USD->INR) are rejected because cross-currency
-    decay calculations are meaningless.
-
-    Args:
-        chain: List of transaction dicts from dfs_trace_chains.
-
-    Returns:
-        LayeringChain if the chain meets all layering criteria, None otherwise.
-    """
-    if len(chain) < MIN_CHAIN_LENGTH:
+def _analyze_chain(
+    chain: list[dict],
+    *,
+    min_chain_length: int = MIN_CHAIN_LENGTH,
+    decay_min: Decimal = DECAY_RATE_MIN,
+    decay_max: Decimal = DECAY_RATE_MAX,
+    decay_tolerance: Decimal = DECAY_TOLERANCE,
+    max_hop_delay_seconds: int = MAX_HOP_DELAY_SECONDS,
+) -> LayeringChain | None:
+    """Analyze a single DFS chain for layering characteristics."""
+    if len(chain) < min_chain_length:
         return None
 
     currencies_in_chain = set(tx.get("currency", "USD") for tx in chain)
@@ -111,15 +107,15 @@ def _analyze_chain(chain: list[dict]) -> LayeringChain | None:
     chain_currency = currencies_in_chain.pop()
 
     decay_rates: list[Decimal] = []
-    effective_min = DECAY_RATE_MIN - DECAY_TOLERANCE
-    effective_max = DECAY_RATE_MAX + DECAY_TOLERANCE
+    effective_min = decay_min - decay_tolerance
+    effective_max = decay_max + decay_tolerance
 
     for i in range(len(chain) - 1):
         current_tx = chain[i]
         next_tx = chain[i + 1]
 
-        time_gap = abs(next_tx["timestamp"] - current_tx["timestamp"])
-        if time_gap > MAX_HOP_DELAY_SECONDS:
+        time_gap = next_tx["timestamp"] - current_tx["timestamp"]
+        if not 0 <= time_gap <= max_hop_delay_seconds:
             return None
 
         decay = _calculate_hop_decay(current_tx["amount"], next_tx["amount"])
@@ -157,37 +153,89 @@ def detect_layering(
     node_id: str,
     max_depth: int | None = None,
     currency: str | None = None,
+    *,
+    min_chain_length: int = MIN_CHAIN_LENGTH,
+    decay_min: Decimal = DECAY_RATE_MIN,
+    decay_max: Decimal = DECAY_RATE_MAX,
+    decay_tolerance: Decimal = DECAY_TOLERANCE,
+    max_hop_delay_seconds: int = MAX_HOP_DELAY_SECONDS,
+    deadline_monotonic: float | None = None,
+    prune_constraints: bool = True,
 ) -> LayeringResult:
     """
-    Detect layering patterns originating from a specific node.
+    Detect maximal qualifying layering chains originating from a specific node.
 
-    v8.0 [P4v8-08]: Optional currency parameter. If provided, only chains
-    matching that currency are included in results. If None, all chains
-    (with internally consistent currencies) are accepted.
-
-    Args:
-        graph_reasoner: Loaded GraphReasoner instance.
-        node_id: Node ID to trace chains from.
-        max_depth: Optional DFS depth limit.
-        currency: Optional currency filter for detected chains.
-
-    Returns:
-        LayeringResult with detection outcome and chain details.
+    Uses constraint-pruned deterministic DFS by default so invalid reverse-time,
+    mixed-currency, or non-decaying edges do not exhaust MAX_PATHS_PER_SEARCH,
+    while preserving exact equivalence with exhaustive simple-path enumeration.
     """
-    raw_chains = graph_reasoner.dfs_trace_chains(node_id, max_depth=max_depth)
+    effective_min = decay_min - decay_tolerance
+    effective_max = decay_max + decay_tolerance
 
-    detected_chains: list[LayeringChain] = []
+    def _valid_transition(prev_tx: dict | None, next_tx: dict) -> bool:
+        next_cur = next_tx.get("currency", "USD")
+        if currency is not None and next_cur != currency:
+            return False
+        if prev_tx is None:
+            return next_tx["amount"] > Decimal("0")
+        if prev_tx.get("currency", "USD") != next_cur:
+            return False
+        time_gap = next_tx["timestamp"] - prev_tx["timestamp"]
+        if not 0 <= time_gap <= max_hop_delay_seconds:
+            return False
+        decay = _calculate_hop_decay(prev_tx["amount"], next_tx["amount"])
+        return decay is not None and effective_min <= decay <= effective_max
+
+    if prune_constraints:
+        raw_chains = graph_reasoner.dfs_trace_chains(
+            node_id,
+            max_depth=max_depth,
+            edge_filter=_valid_transition,
+            min_length=min_chain_length,
+            deadline_monotonic=deadline_monotonic,
+        )
+    else:
+        raw_chains = graph_reasoner.dfs_trace_chains(
+            node_id,
+            max_depth=max_depth,
+            deadline_monotonic=deadline_monotonic,
+        )
+
+    candidates: dict[tuple[str, ...], LayeringChain] = {}
     for raw_chain in raw_chains:
-        analyzed = _analyze_chain(raw_chain)
-        if analyzed is not None:
-            if currency is not None and analyzed.currency != currency:
-                continue
-            detected_chains.append(analyzed)
+        if currency is not None and raw_chain[0].get("currency", "USD") != currency:
+            continue
+        for end in range(len(raw_chain), min_chain_length - 1, -1):
+            prefix = raw_chain[:end]
+            identity = tuple(tx["tx_id"] for tx in prefix)
+            if identity in candidates:
+                break
+            analyzed = _analyze_chain(
+                prefix,
+                min_chain_length=min_chain_length,
+                decay_min=decay_min,
+                decay_max=decay_max,
+                decay_tolerance=decay_tolerance,
+                max_hop_delay_seconds=max_hop_delay_seconds,
+            )
+            if analyzed is not None:
+                candidates[identity] = analyzed
+                break
+
+    extended_prefixes = {
+        identity[:end]
+        for identity in candidates
+        for end in range(min_chain_length, len(identity))
+    }
+    detected_chains = [
+        candidates[identity] for identity in sorted(candidates)
+        if identity not in extended_prefixes
+    ]
 
     if detected_chains:
         longest = max(c.hop_count for c in detected_chains)
         chain_confidence = min(
-            Decimal(str(longest)) / Decimal(str(MIN_CHAIN_LENGTH * 2)),
+            Decimal(str(longest)) / Decimal(str(min_chain_length * 2)),
             Decimal("1"),
         )
         count_bonus = min(
@@ -208,7 +256,7 @@ def detect_layering(
             reasoning=(
                 f"LAYERING detected from node '{node_id}': "
                 f"{len(detected_chains)} chain(s) with systematic "
-                f"{DECAY_RATE_MIN*100}-{DECAY_RATE_MAX*100}% decay. "
+                f"{decay_min*100}-{decay_max*100}% decay. "
                 f"Longest chain: {longest} hop(s). "
                 f"Currency: {result_currency}."
             ),

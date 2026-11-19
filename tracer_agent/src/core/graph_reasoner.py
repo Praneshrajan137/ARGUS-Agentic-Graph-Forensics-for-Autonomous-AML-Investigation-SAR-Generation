@@ -21,7 +21,9 @@ v7.0: Full Architecture S4 Step 2.5 validation suite at ingestion boundary.
 v6.1: Iterative DFS, NaN guard, path explosion protection.
 """
 import logging
+import time
 from decimal import Decimal
+from typing import Callable
 
 import networkx as nx
 
@@ -46,6 +48,24 @@ class GraphReasoner:
     def __init__(self) -> None:
         """Initialize with empty MultiDiGraph."""
         self.graph: nx.MultiDiGraph = nx.MultiDiGraph()
+        self._coverage_limitations: set[tuple[str, str, int]] = set()
+
+    @property
+    def coverage(self) -> dict:
+        """JSON-ready snapshot of safety limits encountered on this loaded graph.
+
+        COMPLETE means no degree/path truncation in searches performed so far,
+        not that every node has been searched. Requested DFS depth is the search
+        scope. Limitations accumulate across searches, are deduplicated per node
+        and limit, and reset on load_from_dict. No process-global counters.
+        """
+        return {
+            "status": "PARTIAL" if self._coverage_limitations else "COMPLETE",
+            "limitations": [
+                {"reason": reason, "node": node, "limit": limit}
+                for reason, node, limit in sorted(self._coverage_limitations)
+            ],
+        }
 
     def _check_super_node(self, node_id: str) -> bool:
         """
@@ -64,6 +84,7 @@ class GraphReasoner:
         """
         total_degree = self.graph.degree(node_id)
         if total_degree > MAX_NODE_DEGREE:
+            self._coverage_limitations.add(("MAX_NODE_DEGREE", node_id, MAX_NODE_DEGREE))
             logger.warning(
                 f"Super-node detected: {node_id} has total degree {total_degree} "
                 f"(limit: {MAX_NODE_DEGREE}). Skipping to prevent OOM. "
@@ -73,7 +94,7 @@ class GraphReasoner:
             return True
         return False
 
-    def load_from_dict(self, graph_data: dict) -> None:
+    def load_from_dict(self, graph_data: dict, *, strict_currency: bool = False) -> None:
         """
         Load a graph from dict (deserialized Protobuf or test fixture).
 
@@ -103,6 +124,7 @@ class GraphReasoner:
                 f"{self.graph.number_of_edges()} edges). Clearing all data."
             )
         self.graph.clear()
+        self._coverage_limitations.clear()
 
         transactions = graph_data.get("transactions", [])
         if not transactions:
@@ -151,7 +173,11 @@ class GraphReasoner:
                     f"Transaction {tx_id}: currency must be non-empty. "
                     f"Provide a valid ISO currency code (e.g., 'USD', 'INR')."
                 )
-            # v8.0 [P4v8-04]: Normalize None/missing-key → "USD".
+            if strict_currency and raw_currency is None:
+                raise ValueError(
+                    f"Transaction {tx_id}: missing currency is forbidden in strict mode."
+                )
+            # v8.0 [P4v8-04]: Legacy research path normalizes None -> "USD".
             currency = raw_currency or "USD"
 
             timestamp = tx.get("timestamp", 0)
@@ -253,26 +279,21 @@ class GraphReasoner:
         return sorted(outgoing, key=lambda x: x["tx_id"])
 
     def dfs_trace_chains(
-        self, start_node: str, max_depth: int | None = None
+        self,
+        start_node: str,
+        max_depth: int | None = None,
+        *,
+        edge_filter: Callable[[dict | None, dict], bool] | None = None,
+        min_length: int = 1,
+        deadline_monotonic: float | None = None,
     ) -> list[list[dict]]:
         """
-        DFS: Trace all outflow chains from start_node.
+        DFS: Trace outflow chains from start_node with optional constraint pruning.
 
-        Returns list of chains (each chain = list of transaction dicts).
-
-        v6.1 [ALN-03]: ITERATIVE implementation using explicit stack.
-        Rule 20: "DFS must be iterative (stack-based), never recursive"
-
-        v7.0 [P4-15]: Traversal order is deterministic: alphabetical by tx_id.
-        get_1hop_outgoing returns sorted results. reversed() push order ensures
-        the alphabetically-first tx_id is popped (explored) first from the LIFO stack.
-
-        Args:
-            start_node: Node ID to begin chain traversal from.
-            max_depth: Maximum DFS depth. Defaults to MAX_DFS_DEPTH from config.
-
-        Returns:
-            List of chains. Each chain is a list of transaction dicts.
+        When edge_filter(prev_tx, next_tx) is provided, invalid transitions are
+        pruned before entering the stack and dead-end chains shorter than
+        min_length do not consume MAX_PATHS_PER_SEARCH slots. A bounded expansion
+        budget still guarantees termination on adversarial dense graphs.
         """
         if max_depth is None:
             max_depth = MAX_DFS_DEPTH
@@ -285,47 +306,56 @@ class GraphReasoner:
         stack: list[tuple[str, list[dict], frozenset, int]] = [
             (start_node, [], initial_visited, 0)
         ]
+        deadline_hit = False
+        expansions = 0
+        max_expansions = max(MAX_PATHS_PER_SEARCH * 100, 1000)
 
         while stack:
-            if len(all_chains) >= MAX_PATHS_PER_SEARCH:
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                deadline_hit = True
                 break
+            if len(all_chains) >= MAX_PATHS_PER_SEARCH or expansions >= max_expansions:
+                break
+            expansions += 1
 
             current_node, current_chain, visited, depth = stack.pop()
 
             if depth >= max_depth:
-                if current_chain:
+                if len(current_chain) >= min_length:
                     all_chains.append(current_chain)
                 continue
 
             outgoing = self.get_1hop_outgoing(current_node)
 
             if not outgoing:
-                if current_chain:
+                if len(current_chain) >= min_length:
                     all_chains.append(current_chain)
                 continue
 
+            prev_tx = current_chain[-1] if current_chain else None
             unvisited_txs = [
                 tx for tx in outgoing
                 if tx["target_node"] not in visited
+                and (edge_filter is None or edge_filter(prev_tx, tx))
             ]
 
             if not unvisited_txs:
-                if current_chain:
+                if len(current_chain) >= min_length:
                     all_chains.append(current_chain)
                 continue
 
             for tx in reversed(unvisited_txs):
-                if len(all_chains) >= MAX_PATHS_PER_SEARCH:
-                    if current_chain:
-                        all_chains.append(current_chain)
-                    break
-
                 next_node = tx["target_node"]
                 new_chain = current_chain + [tx]
                 new_visited = visited | {next_node}
                 stack.append((next_node, new_chain, new_visited, depth + 1))
 
-        if len(all_chains) >= MAX_PATHS_PER_SEARCH:
+        if deadline_hit:
+            self._coverage_limitations.add(("DEADLINE_EXCEEDED", start_node, 0))
+            logger.warning("DFS from %s stopped: analysis deadline exceeded.", start_node)
+        elif stack:
+            # Reaching the cap exactly with no pending work is still complete.
+            self._coverage_limitations.add(("MAX_PATHS_PER_SEARCH", start_node, MAX_PATHS_PER_SEARCH))
             logger.warning(
                 f"DFS from {start_node}: path limit reached ({MAX_PATHS_PER_SEARCH}). "
                 "Results are truncated. Possible adversarial graph structure."

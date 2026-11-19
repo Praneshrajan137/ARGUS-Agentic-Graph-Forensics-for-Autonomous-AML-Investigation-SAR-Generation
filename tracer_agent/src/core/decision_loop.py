@@ -40,6 +40,7 @@ import hashlib
 import time
 import logging
 from decimal import Decimal
+from dataclasses import asdict
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
@@ -52,10 +53,7 @@ logger = logging.getLogger(__name__)
 # Architecture S4 Step 6: "+0.2 if text evidence corroborates detection."
 # Only these explicit corroboration signals trigger the boost.
 _CORROBORATING_VERDICTS = frozenset({
-    "CORROBORATED",
-    "SUSPICIOUS_DISCREPANCY",
-    "CONFIRMED",
-    "PARTIAL_MATCH",
+    "MATCH",
 })
 
 
@@ -278,6 +276,7 @@ def detect_typology(state: InvestigationState) -> InvestigationState:
             "detection_results": detection_results,
             "involved_entities": involved,
             "confidence_score": 0.0,
+            "coverage": reasoner.coverage,
         }
     except Exception as e:
         logger.error("[%s] Detection failed: %s", state["case_id"], e, exc_info=True)
@@ -319,7 +318,7 @@ def synthesize_evidence(state: InvestigationState) -> InvestigationState:
 
         total_inflow = Decimal("0")
         for tx in graph_data.get("transactions", []):
-            if tx["target_node"] == state["subject_id"]:
+            if tx["target_node"] == state["subject_id"] and tx["currency"] == currency:
                 total_inflow += tx["amount"]
 
         ledger_data = {
@@ -336,6 +335,10 @@ def synthesize_evidence(state: InvestigationState) -> InvestigationState:
             "discrepancies": result.discrepancies,
             "entities": list(result.extracted_entities),
             "amounts": [str(a) for a in result.extracted_amounts],
+            "observations": [{**item, "amount": str(item["amount"])} for item in result.observations],
+            "comparisons": result.comparisons,
+            "checked_count": result.checked_count,
+            "eligible_count": result.eligible_count,
         }
 
         logger.info(
@@ -384,7 +387,7 @@ def compute_confidence(state: InvestigationState) -> InvestigationState:
     # v9.0 [P5v9-05]: POSITIVE matching -- only known corroboration verdicts
     evidence_boost = 0.0
     verdict = evidence.get("verdict", "")
-    if verdict in _CORROBORATING_VERDICTS:
+    if verdict in _CORROBORATING_VERDICTS and evidence.get("checked_count", 0) > 0:
         evidence_boost = 0.2
 
     discrepancy_boost = 0.0
@@ -403,13 +406,12 @@ def compute_confidence(state: InvestigationState) -> InvestigationState:
 
     if score < float(CONFIDENCE_THRESHOLD):
         logger.info(
-            "[%s] Confidence %s < threshold %s. Downgrading typology to NONE (LOW_CONFIDENCE).",
+            "[%s] Heuristic score %s < threshold %s. Retaining findings without automatic drafting.",
             state["case_id"], score, CONFIDENCE_THRESHOLD,
         )
         return {
             **state,
             "confidence_score": score,
-            "detected_typology": "NONE",
         }
 
     return {**state, "confidence_score": score}
@@ -480,119 +482,100 @@ def draft_sar(state: InvestigationState) -> InvestigationState:
             }
         except Exception as e2:
             logger.error("[%s] Mechanical SAR also failed: %s", state["case_id"], e2)
-            return {**state, "sar_narrative": "", "sar_draft": None}
+            return {
+                **state, "status": "FAILED", "sar_narrative": "", "sar_draft": None,
+                "error_message": "Narrative generation failed",
+            }
 
 
 def validate_sar(state: InvestigationState) -> InvestigationState:
-    """Validate SAR against graph data. Increment retry on failure."""
+    metadata = {
+        "status": "NOT_RUN", "passed": False, "errors": [],
+        "checked_count": 0, "eligible_count": 0,
+        "validator_version": "sar-references-v1", "artifact_digest": "",
+    }
     if state.get("status") == "FAILED":
-        return {**state, "validation_result": {"passed": False, "errors": ["Investigation failed"]}}
-
+        metadata.update(status="FAILED", errors=["Investigation failed"])
+        return {**state, "validation_result": metadata}
     if state.get("sar_draft") is None:
-        return {
-            **state,
-            "validation_result": {"passed": True, "errors": []},
-        }
-
+        if state.get("detected_typology") == "NONE":
+            metadata["status"] = "NOT_APPLICABLE"
+            return {**state, "validation_result": metadata}
+        metadata.update(status="FAILED", errors=["Required narrative is missing"])
+        return {**state, "validation_result": metadata, "retry_count": state.get("retry_count", 0) + 1}
     try:
         from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
-
-        drafter = SARDrafter()
-        draft_data = state.get("sar_draft")
-        draft = SARDraft(**draft_data)
-        graph_data = state.get("graph_fragment") or {}
-
-        validation = drafter.validate_sar(draft, graph_data)
-
-        if not validation.passed:
-            logger.warning(
-                "[%s] SAR validation failed (attempt %d): %s",
-                state["case_id"], state.get("retry_count", 0) + 1, validation.errors,
-            )
-            return {
-                **state,
-                "validation_result": {"passed": False, "errors": validation.errors},
-                "retry_count": state.get("retry_count", 0) + 1,
-                "sar_narrative": None,
-            }
-
-        logger.info("[%s] SAR validation PASSED", state["case_id"])
+        draft = SARDraft(**state["sar_draft"])
+        validation = SARDrafter().validate_sar(draft, state.get("graph_fragment") or {})
+        metadata.update(
+            status="PASSED" if validation.passed else "FAILED",
+            passed=validation.passed, errors=validation.errors,
+            checked_count=len(draft.cited_tx_ids), eligible_count=len(draft.cited_tx_ids),
+            artifact_digest=hashlib.sha256(draft.raw_narrative.encode("utf-8")).hexdigest(),
+        )
         return {
-            **state,
-            "validation_result": {"passed": True, "errors": []},
+            **state, "validation_result": metadata,
+            "retry_count": state.get("retry_count", 0) + (not validation.passed),
+            "sar_narrative": draft.raw_narrative if validation.passed else None,
         }
-    except Exception as e:
-        logger.error("[%s] SAR validation error: %s", state["case_id"], e)
-        return {
-            **state,
-            "validation_result": {"passed": False, "errors": [str(e)]},
-            "retry_count": state.get("retry_count", 0) + 1,
-        }
+    except (TypeError, ValueError, KeyError) as exc:
+        logger.warning("[%s] Invalid draft structure: %s", state["case_id"], type(exc).__name__)
+        metadata.update(status="FAILED", errors=["Invalid narrative structure"])
+        return {**state, "validation_result": metadata, "retry_count": state.get("retry_count", 0) + 1}
 
 
 def submit_result(state: InvestigationState) -> InvestigationState:
-    """Submit investigation result via A2A Client.
-
-    v8.0 [P5v8-04]: Computes SHA-256 idempotency key per Rule 18.
-    v6.1 [ALN-05]: Mechanical SAR fallback on retries exhausted.
-    Bug 1 fix: passes case_id to A2AClient.submit_result().
-    """
+    if state.get("status") == "FAILED":
+        return state
     try:
-        from tracer_agent.src.core.sar_drafter import SARDrafter, SARDraft
-
-        draft_data = state.get("sar_draft")
-        formatted_narrative = state.get("sar_narrative", "")
-
-        # v6.1 [ALN-05]: Mechanical fallback if narrative empty but crime detected
-        if (not formatted_narrative or formatted_narrative == "") and state.get("detected_typology") != "NONE":
-            from tracer_agent.src.core.sar_drafter import mechanical_sar_template
-            fallback_draft = mechanical_sar_template(
-                detection_results=state.get("detection_results") or {},
-                graph_data=state.get("graph_fragment") or {},
-                jurisdiction=state["jurisdiction"],
-            )
-            drafter = SARDrafter()
-            formatted_narrative = drafter.format_sar(fallback_draft)
-            logger.warning("[%s] Using mechanical SAR template for submission (Rule 24).", state["case_id"])
-        elif draft_data:
-            drafter = SARDrafter()
-            draft = SARDraft(**draft_data)
-            formatted_narrative = drafter.format_sar(draft)
-
-        typology = state.get("detected_typology", "NONE")
-        involved = state.get("involved_entities", [])
-        idem_input = f"{state['case_id']}{typology}{''.join(sorted(involved))}"
-        idempotency_key = hashlib.sha256(idem_input.encode("utf-8")).hexdigest()
-
+        from tracer_agent.src.core.sar_drafter import SARDrafter, mechanical_sar_template
+        typology = state.get("detected_typology")
+        if typology not in {"NONE", "STRUCTURING", "LAYERING", "BOTH"}:
+            return {**state, "status": "FAILED", "error_message": "Missing detection outcome"}
+        if typology != "NONE" and (should_generate_sar(state) == "draft" or state.get("sar_draft")):
+            if not state.get("sar_narrative") or not state.get("sar_draft"):
+                fallback = mechanical_sar_template(
+                    state.get("detection_results") or {},
+                    state.get("graph_fragment") or {}, state["jurisdiction"],
+                )
+                state = {**state, "sar_draft": asdict(fallback), "sar_narrative": fallback.raw_narrative}
+            state = validate_sar(state)
+            if not state["validation_result"]["passed"]:
+                return {**state, "status": "FAILED", "error_message": "Narrative failed source checks"}
+            from tracer_agent.src.core.sar_drafter import SARDraft
+            narrative = SARDrafter().format_sar(SARDraft(**state["sar_draft"]))
+        else:
+            skipped = validate_sar({**state, "sar_draft": None, "detected_typology": "NONE"})
+            state = {**state, "validation_result": skipped["validation_result"]}
+            narrative = ""
+        involved = sorted(state.get("involved_entities", []))
+        idem_input = f"{state['case_id']}:{typology}:{','.join(involved)}"
         result_dict = {
-            "case_id": state["case_id"],
-            "sar_narrative": formatted_narrative,
-            "typology_detected": typology,
-            "involved_entities": involved,
+            "case_id": state["case_id"], "sar_narrative": narrative,
+            "typology_detected": typology, "involved_entities": involved,
             "confidence_score": state.get("confidence_score", 0.0),
             "jurisdiction": state["jurisdiction"],
             "investigation_timestamp": int(time.time()),
-            "idempotency_key": idempotency_key,
+            "idempotency_key": hashlib.sha256(idem_input.encode("utf-8")).hexdigest(),
         }
-
         from tracer_agent.src.core.a2a_client import A2AClient
-        client = A2AClient()
-        _run_async(client.submit_result(result_dict, state["case_id"]))
 
-        logger.info(
-            "[%s] Result submitted: %s (confidence=%s, idem_key=%s...)",
-            state["case_id"], typology, state.get("confidence_score", 0),
-            idempotency_key[:16],
-        )
+        async def send() -> None:
+            client = A2AClient()
+            try:
+                await client.submit_result(result_dict, state["case_id"])
+            finally:
+                await client.close()
+
+        _run_async(send())
         return {
-            **state,
-            "status": "COMPLETE",
-            "sar_narrative": formatted_narrative,
+            **state, "status": "COMPLETE", "sar_narrative": narrative,
             "investigation_timestamp": result_dict["investigation_timestamp"],
+            "idempotency_key": result_dict["idempotency_key"],
         }
-    except Exception as e:
-        logger.error("[%s] Submission failed: %s", state["case_id"], e)
-        return {**state, "status": "COMPLETE"}
+    except Exception as exc:
+        logger.error("[%s] Research submission failed: %s", state["case_id"], type(exc).__name__)
+        return {**state, "status": "FAILED", "error_message": "Research submission failed"}
 
 
 def should_generate_sar(state: InvestigationState) -> str:
@@ -615,6 +598,8 @@ def should_retry(state: InvestigationState) -> str:
     v6.1 [ALN-05]: When max retries reached, submit_result will use
     mechanical SAR template (Rule 24: never empty narrative).
     """
+    if state.get("status") == "FAILED":
+        return "submit"
     validation = state.get("validation_result", {})
     if validation and validation.get("passed", False):
         return "submit"

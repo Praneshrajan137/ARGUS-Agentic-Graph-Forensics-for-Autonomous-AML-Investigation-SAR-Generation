@@ -1,41 +1,16 @@
-"""
-Evidence Synthesizer -- Sherlock Holmes Multi-Modal Reasoning
-PRD Reference: Task B4
-Package Version: v8.0
+"""Source-linked monetary observations and explicitly scoped ledger comparisons.
 
-CORE PRINCIPLE: Ledger data is GROUND TRUTH. Text discrepancy = EVIDENCE of crime.
-
-v8.0 CRITICAL FIX [P4v8-01]:
-  v7.0 switched to IFSC_COMPILED, PAN_COMPILED, SWIFT_COMPILED, IBAN_COMPILED
-  from config.py. These patterns use ^$ anchors (VALIDATION mode) which
-  require the ENTIRE input string to match. When used with .finditer(text),
-  they return ZERO matches for identifiers embedded in longer text.
-
-  v8.0 imports _SEARCH_COMPILED patterns which use \\b word boundaries:
-    IFSC_SEARCH_COMPILED.finditer("via SBIN0001234 to") -> 1 match
-    IFSC_COMPILED.finditer("via SBIN0001234 to")        -> 0 matches
-
-  Both pattern sets exist in config.py:
-    _COMPILED: for full-string validation (Protobuf ingestion boundary)
-    _SEARCH_COMPILED: for finding identifiers within text (B4 evidence)
-
-v8.0 BUG FIX [INR-CLEAN]:
-  Prompt-level code only stripped "$" and "," from matched amounts.
-  INR patterns (inr_symbol, inr_rs_prefix) produce raw strings containing
-  "₹" or "Rs." prefixes which Decimal() cannot parse. Fixed by extending
-  the cleaning pipeline to strip ₹ and Rs./Rs prefixes.
-
-v7.0 [P4-12]: Sum comparison for component amounts.
-v6.1 [ALN-06]: SPACY_MODEL_NAME from config.
-v6.0: Lazy spaCy, amount dedup, zero-ledger fix.
+A disagreement is a numerical finding for review, not an inference of wrongdoing.
+Entity extraction retains lazy spaCy NER and search-mode financial ID patterns.
 """
 import re
 import logging
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 from dataclasses import dataclass, field
 
 from tracer_agent.src.config import (
     AMOUNT_PATTERNS,
+    AMOUNT_BROKEN_NUMBER_PATTERN,
     IFSC_SEARCH_COMPILED,
     PAN_SEARCH_COMPILED,
     SWIFT_SEARCH_COMPILED,
@@ -50,12 +25,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EvidenceResult:
-    """Result of evidence synthesis."""
+    """Result with source observations and one comparison detail per document.
+
+    checked_count counts performed numeric comparisons; eligible_count counts
+    documents with complete equal scopes, valid aggregation and known currency.
+    MATCH applies only to the checked subset, never to skipped documents.
+    """
     verdict: str
     reasoning: str
     discrepancies: list[dict] = field(default_factory=list)
     extracted_entities: list[dict] = field(default_factory=list)
     extracted_amounts: list[Decimal] = field(default_factory=list)
+    observations: list[dict] = field(default_factory=list)
+    comparisons: list[dict] = field(default_factory=list)
+    checked_count: int = 0
+    eligible_count: int = 0
 
 
 class EvidenceSynthesizer:
@@ -190,163 +174,226 @@ class EvidenceSynthesizer:
 
         return entities
 
-    def extract_amounts_from_text(self, text: str) -> list[Decimal]:
+    @staticmethod
+    def _observation_currency(groups: dict) -> str | None:
+        """Resolve only explicit, mutually compatible currency markers."""
+        codes = {
+            value.upper() for key in ("currency_before", "currency_after")
+            if (value := groups.get(key))
+        }
+        symbol = (groups.get("symbol") or "").lower().rstrip(".")
+        symbol_codes = {
+            "$": {"USD", "CAD", "AUD", "NZD", "SGD", "HKD"},
+            "₹": {"INR"},
+            "€": {"EUR"},
+            "£": {"GBP", "EGP", "LBP", "SYP", "FKP", "GIP", "SHP"},
+            "rs": {"INR", "PKR", "LKR", "NPR", "MUR", "SCR"},
+        }.get(symbol)
+        if len(codes) > 1:
+            return None
+        if codes:
+            code = next(iter(codes))
+            return code if symbol_codes is None or code in symbol_codes else None
+        if symbol_codes and len(symbol_codes) == 1:
+            return next(iter(symbol_codes))
+        # Dollars, pounds, Rs., lakh and crore do not identify a unique currency.
+        return None
+
+    def extract_monetary_observations(
+        self,
+        text: str,
+        *,
+        document_id: str | None = None,
+        document_index: int = 0,
+    ) -> list[dict]:
+        """Extract occurrences in source order, without invoking spaCy.
+
+        start/end are half-open character offsets into the original document.
+        Longer representations win over overlapping alternatives; equal amounts
+        at separate spans remain separate. Conflicting currency markers produce
+        an unknown currency, never a shorter, apparently compatible observation.
         """
-        Extract monetary amounts from unstructured text.
-
-        v8.0 [INR-CLEAN]: Extended cleaning to handle INR prefixes.
-        v6.0 FIX: Deduplicates amounts via seen set.
-
-        Args:
-            text: Unstructured text.
-
-        Returns:
-            Deduplicated list of Decimal amounts.
-        """
-        amounts: list[Decimal] = []
-        seen_amounts: set[Decimal] = set()
-
-        for pattern_name, pattern in AMOUNT_PATTERNS.items():
-            for match in re.finditer(pattern, text):
-                try:
-                    raw = match.group(0) if not match.groups() else match.group(1)
-
-                    cleaned = (
-                        raw.replace("$", "")
-                        .replace("\u20b9", "")   # ₹ (U+20B9 Indian Rupee Sign)
-                        .replace(",", "")
-                    )
-                    cleaned = re.sub(r"^Rs\.?\s*", "", cleaned).strip()
-
-                    if pattern_name == "inr_lakh":
-                        amount = Decimal(cleaned) * Decimal("100000")
-                    elif pattern_name == "inr_crore":
-                        amount = Decimal(cleaned) * Decimal("10000000")
-                    elif pattern_name == "usd_k":
-                        amount = Decimal(cleaned) * Decimal("1000")
-                    else:
-                        amount = Decimal(cleaned)
-
-                    if not amount.is_finite():
-                        logger.warning(
-                            "Non-finite amount %s from pattern %s — skipped.",
-                            amount, pattern_name,
-                        )
-                        continue
-
-                    if amount not in seen_amounts:
-                        seen_amounts.add(amount)
-                        amounts.append(amount)
-                except (InvalidOperation, ValueError):
+        candidates: list[dict] = []
+        invalid_spans = [
+            match.span(1) for match in re.finditer(AMOUNT_BROKEN_NUMBER_PATTERN, text)
+        ]
+        for pattern in AMOUNT_PATTERNS.values():
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                groups = match.groupdict()
+                if groups.get("sign_before") and groups.get("sign_after"):
+                    invalid_spans.append(match.span())
                     continue
+                amount = Decimal(groups["number"].replace(",", ""))
+                if (groups.get("sign_before") or groups.get("sign_after")) == "-":
+                    amount = amount.copy_negate()
+                scale = (groups.get("scale") or "").lower().rstrip("s")
+                exponent_shift = {"k": 3, "lakh": 5, "crore": 7}.get(scale, 0)
+                # Tuple construction avoids Decimal context rounding for long
+                # coefficients, unlike multiplication by the magnitude.
+                sign, digits, exponent = amount.as_tuple()
+                amount = Decimal((sign, digits, exponent + exponent_shift))
+                candidates.append({
+                    "document_id": document_id,
+                    "document_index": document_index,
+                    "start": match.start(),
+                    "end": match.end(),
+                    "text": match.group(),
+                    "amount": amount,
+                    "currency": self._observation_currency(groups),
+                })
 
-        return amounts
+        observations: list[dict] = []
+        occupied = list(invalid_spans)
+        for candidate in sorted(
+            candidates, key=lambda item: (item["start"] - item["end"], item["start"]),
+        ):
+            start, end = candidate["start"], candidate["end"]
+            if any(start < other_end and other_start < end for other_start, other_end in occupied):
+                continue
+            observations.append(candidate)
+            occupied.append((start, end))
+        return sorted(observations, key=lambda item: item["start"])
+
+    def extract_amounts_from_text(self, text: str) -> list[Decimal]:
+        """Return exact values in occurrence order, preserving repeated amounts."""
+        return [item["amount"] for item in self.extract_monetary_observations(text)]
+
+    @staticmethod
+    def _comparison_scope(scope: object) -> dict | None:
+        """Require explicit, nonempty scope strings; never infer missing fields."""
+        fields = ("entity_id", "period_start", "period_end", "currency", "basis", "aggregation")
+        if not isinstance(scope, dict):
+            return None
+        if not all(isinstance(scope.get(key), str) and scope[key].strip() for key in fields):
+            return None
+        if scope["aggregation"] not in ("total", "components"):
+            return None
+        return {key: scope[key] for key in fields}
+
+    @staticmethod
+    def _ledger_amount(ledger_data: dict) -> Decimal | None:
+        raw = ledger_data.get("total_inflow")
+        # Avoid implicit binary-float or boolean monetary conversions.
+        if isinstance(raw, bool) or not isinstance(raw, (Decimal, str, int)):
+            return None
+        try:
+            amount = Decimal(raw)
+            return amount if amount.is_finite() else None
+        except (InvalidOperation, ValueError):
+            return None
+
+    @staticmethod
+    def _exact_sum(amounts: list[Decimal]) -> Decimal:
+        """Preserve coefficient precision for both aggregation and subtraction."""
+        lowest_exponent = min(amount.as_tuple().exponent for amount in amounts)
+        highest_digit = max(amount.adjusted() for amount in amounts)
+        with localcontext() as context:
+            context.prec = max(context.prec, highest_digit - lowest_exponent + len(str(len(amounts))) + 2)
+            return sum(amounts, Decimal("0"))
 
     def synthesize(
         self,
-        ledger_data: dict,
+        ledger_data: dict | None,
         text_evidence: list[dict | str],
         currency: str = "USD",
     ) -> EvidenceResult:
+        """Compare each eligible document independently against total_inflow.
+
+        Both ledger and document must carry a nested ``scope`` with nonempty
+        string fields entity_id, period_start, period_end, currency, basis and
+        aggregation. All six must be equal. ``total`` requires one observation;
+        ``components`` sums only that document's occurrences. Every observation
+        must have a known currency equal to the scope currency. The legacy
+        currency argument is retained for call compatibility, not inference.
+
+        Verdict precedence: missing/invalid ledger -> INSUFFICIENT_DATA; no
+        monetary occurrences -> NO_OBSERVATION; none eligible -> NOT_COMPARABLE;
+        any checked disagreement -> DISAGREEMENT; otherwise -> MATCH for the
+        checked subset. Unknown/ineligible documents remain visible in details.
+        USD/INR use configured tolerances; other currencies require exact equality.
         """
-        Cross-reference ledger (ground truth) with text evidence.
+        ledger_data = ledger_data or {}
+        ledger_amount = self._ledger_amount(ledger_data)
+        ledger_scope = self._comparison_scope(ledger_data.get("scope"))
+        result = EvidenceResult(verdict="NOT_COMPARABLE", reasoning="")
 
-        v7.0 [P4-12]: Two-level comparison:
-          Level 1: Each text amount vs ledger total.
-          Level 2: sum(text amounts) vs ledger total.
-
-        Args:
-            ledger_data: Dict with "total_inflow", "entity_id", "transactions".
-            text_evidence: List of evidence dicts (with "content" key) or plain strings.
-            currency: "USD" or "INR" for jurisdiction-specific thresholds.
-
-        Returns:
-            EvidenceResult with verdict, reasoning, and extracted data.
-        """
-        if not text_evidence:
-            return EvidenceResult(
-                verdict="INSUFFICIENT_DATA",
-                reasoning="No unstructured text evidence available for cross-reference.",
+        for document_index, evidence in enumerate(text_evidence):
+            document = evidence if isinstance(evidence, dict) else {"content": evidence}
+            text = document.get("content") or ""
+            document_id = document.get("id", document.get("document_id"))
+            result.extracted_entities.extend(self.extract_entities_from_text(text))
+            observations = self.extract_monetary_observations(
+                text, document_id=document_id, document_index=document_index,
             )
-
-        ledger_amount = ledger_data.get("total_inflow")
-        entity_id = ledger_data.get("entity_id", "unknown")
+            first_index = len(result.observations)
+            result.observations.extend(observations)
+            result.extracted_amounts.extend(item["amount"] for item in observations)
+            scope = self._comparison_scope(document.get("scope"))
+            detail = {
+                "document_id": document_id,
+                "document_index": document_index,
+                "observation_indices": list(range(first_index, len(result.observations))),
+                "scope": document.get("scope"),
+                "ledger_scope": ledger_data.get("scope"),
+                "status": "NOT_COMPARABLE",
+                "reason": "",
+            }
+            result.comparisons.append(detail)
+            if ledger_amount is None:
+                detail.update(status="INSUFFICIENT_DATA", reason="Missing or invalid ledger total_inflow.")
+            elif not observations:
+                detail.update(status="NO_OBSERVATION", reason="No monetary observations in this document.")
+            elif scope is None or ledger_scope is None:
+                detail["reason"] = "Both sources require complete explicit comparison scopes."
+            elif scope != ledger_scope:
+                detail["reason"] = "Document and ledger scopes differ."
+            elif scope["aggregation"] == "total" and len(observations) != 1:
+                detail["reason"] = "Total aggregation requires exactly one monetary observation."
+            elif any(item["currency"] != scope["currency"] for item in observations):
+                detail["reason"] = "Observation currency is unknown or differs from the scope."
+            else:
+                result.eligible_count += 1
+                observed_amount = self._exact_sum([item["amount"] for item in observations])
+                difference = self._exact_sum([observed_amount, ledger_amount.copy_negate()]).copy_abs()
+                threshold = {
+                    "USD": EVIDENCE_DISCREPANCY_THRESHOLD_USD,
+                    "INR": EVIDENCE_DISCREPANCY_THRESHOLD_INR,
+                }.get(scope["currency"], Decimal("0"))
+                status = "DISAGREEMENT" if difference > threshold else "MATCH"
+                detail.update(
+                    status=status,
+                    reason="Compared within equal explicit scopes using the currency tolerance.",
+                    observed_amount=str(observed_amount),
+                    ledger_amount=str(ledger_amount),
+                    difference=str(difference),
+                    threshold=str(threshold),
+                )
+                result.checked_count += 1
+                if status == "DISAGREEMENT":
+                    result.discrepancies.append({
+                        **detail,
+                        "type": "AMOUNT_MISMATCH",
+                        "text_claims": str(observed_amount),
+                        "ledger_shows": str(ledger_amount),
+                        "entity": scope["entity_id"],
+                    })
 
         if ledger_amount is None:
-            return EvidenceResult(
-                verdict="INSUFFICIENT_DATA",
-                reasoning=f"No ledger inflow data available for entity {entity_id}.",
-            )
-
-        threshold = (
-            EVIDENCE_DISCREPANCY_THRESHOLD_INR
-            if currency == "INR"
-            else EVIDENCE_DISCREPANCY_THRESHOLD_USD
-        )
-
-        all_entities: list[dict] = []
-        all_amounts: list[Decimal] = []
-        per_amount_discrepancies: list[dict] = []
-
-        for evidence in text_evidence:
-            text = evidence["content"] if isinstance(evidence, dict) else evidence
-
-            entities = self.extract_entities_from_text(text)
-            all_entities.extend(entities)
-
-            amounts = self.extract_amounts_from_text(text)
-            all_amounts.extend(amounts)
-
-            for text_amount in amounts:
-                if text_amount != ledger_amount:
-                    diff = abs(text_amount - ledger_amount)
-                    if diff > threshold:
-                        per_amount_discrepancies.append({
-                            "type": "AMOUNT_MISMATCH",
-                            "text_claims": str(text_amount),
-                            "ledger_shows": str(ledger_amount),
-                            "difference": str(diff),
-                            "entity": entity_id,
-                        })
-
-        # v7.0 [P4-12]: Level 2 — sum comparison clears false positives
-        # when individual components (e.g., $5K + $3K) add up to ledger ($8K).
-        discrepancies = per_amount_discrepancies
-        if per_amount_discrepancies and len(all_amounts) >= 2:
-            amount_sum = sum(all_amounts)
-            sum_diff = abs(amount_sum - ledger_amount)
-            if sum_diff <= threshold:
-                logger.info(
-                    "Entity %s: %d per-amount discrepancy(ies) cleared by sum "
-                    "comparison. sum(text_amounts)=%s vs ledger=%s (diff=%s "
-                    "<= threshold=%s).",
-                    entity_id, len(per_amount_discrepancies),
-                    amount_sum, ledger_amount, sum_diff, threshold,
-                )
-                discrepancies = []
-
-        if discrepancies:
-            verdict = "SUSPICIOUS_DISCREPANCY"
-            reasoning = (
-                f"DISCREPANCY DETECTED for entity {entity_id}: "
-                f"Text evidence claims amounts that differ from ledger records. "
-                f"Ledger (ground truth) shows {ledger_amount} {currency}. "
-                f"Found {len(discrepancies)} discrepancy(ies). "
-                f"This is EVIDENCE of potential structuring or misrepresentation."
-            )
+            result.verdict = "INSUFFICIENT_DATA"
+            summary = "Missing or invalid ledger total_inflow; observations retained without comparison."
+        elif not result.observations:
+            result.verdict = "NO_OBSERVATION"
+            summary = "No monetary observations were extracted."
+        elif not result.checked_count:
+            summary = "No document met the scope, currency and aggregation requirements for comparison."
+        elif result.discrepancies:
+            result.verdict = "DISAGREEMENT"
+            summary = f"{len(result.discrepancies)} checked document(s) differ from the scoped ledger amount."
         else:
-            verdict = "CONSISTENT"
-            reasoning = (
-                f"Text evidence for entity {entity_id} is consistent with "
-                f"ledger data. "
-                f"No discrepancies detected across {len(text_evidence)} "
-                f"evidence items."
-            )
-
-        return EvidenceResult(
-            verdict=verdict,
-            reasoning=reasoning,
-            discrepancies=discrepancies,
-            extracted_entities=all_entities,
-            extracted_amounts=all_amounts,
+            result.verdict = "MATCH"
+            summary = "Checked documents match the scoped ledger amount within the currency tolerance."
+        result.reasoning = (
+            f"{summary} Checked {result.checked_count} of {result.eligible_count} eligible documents "
+            f"({len(text_evidence)} supplied). Unchecked documents imply no agreement or disagreement."
         )
+        return result

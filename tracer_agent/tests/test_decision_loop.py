@@ -4,6 +4,9 @@ PRD Reference: Task A7
 Updated for v9.0 API (uppercase statuses, renamed functions/fields).
 """
 from typing import Any
+from unittest.mock import AsyncMock
+
+import pytest
 
 from tracer_agent.src.core.decision_loop import (
     InvestigationState,
@@ -132,7 +135,7 @@ class TestConfidenceScoring:
             status="IN_PROGRESS",
             detected_typology="STRUCTURING",
             evidence_package={
-                "verdict": "CORROBORATED",
+                "verdict": "MATCH", "checked_count": 1,
                 "discrepancies": ["amount mismatch"],
             },
         )
@@ -157,7 +160,7 @@ class TestConfidenceScoring:
         state = _make_initial_state(
             status="IN_PROGRESS",
             detected_typology="BOTH",
-            evidence_package={"verdict": "CORROBORATED", "discrepancies": []},
+            evidence_package={"verdict": "MATCH", "checked_count": 1, "discrepancies": []},
         )
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.8
@@ -177,7 +180,7 @@ class TestConfidenceScoring:
         state = _make_initial_state(
             status="IN_PROGRESS",
             detected_typology="STRUCTURING",
-            evidence_package={"verdict": "CORROBORATED", "discrepancies": []},
+            evidence_package={"verdict": "MATCH", "checked_count": 1, "discrepancies": []},
         )
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.5
@@ -195,6 +198,12 @@ class TestConfidenceScoring:
 # SAR Drafting and Validation
 # ═══════════════════════════════════════════════════════════════════
 
+@pytest.fixture(autouse=True)
+def isolate_research_transport(monkeypatch):
+    monkeypatch.setattr("tracer_agent.src.core.a2a_client.A2AClient.submit_result", AsyncMock(return_value={"status": "accepted"}))
+    monkeypatch.setattr("tracer_agent.src.core.a2a_client.A2AClient.fetch_graph", AsyncMock(side_effect=ConnectionError("Offline fixture")))
+
+
 class TestSARDraftingAndValidation:
     def test_draft_sar_skips_on_none_typology(self):
         """When typology is NONE, draft_sar should return empty narrative."""
@@ -206,15 +215,13 @@ class TestSARDraftingAndValidation:
         result = draft_sar(state)
         assert result["sar_narrative"] == "", "NONE typology -> empty narrative"
 
-    def test_validate_sar_passes_when_no_draft(self):
-        """If sar_draft is None (no crime), validation auto-passes."""
+    def test_validate_sar_is_not_applicable_without_findings(self):
         state = _make_initial_state(
-            status="IN_PROGRESS",
-            sar_draft=None,
-            retry_count=0,
+            status="IN_PROGRESS", detected_typology="NONE", sar_draft=None, retry_count=0,
         )
         result = validate_sar(state)
-        assert result["validation_result"]["passed"] is True
+        assert result["validation_result"]["status"] == "NOT_APPLICABLE"
+        assert result["validation_result"]["passed"] is False
 
     def test_validate_sar_handles_failed_status(self):
         """FAILED state should produce a failed validation result."""
@@ -225,15 +232,10 @@ class TestSARDraftingAndValidation:
         result = validate_sar(state)
         assert result["validation_result"]["passed"] is False
 
-    def test_validate_sar_failure_triggers_retry_flow(self):
-        """Integration: validate_sar failure -> should_retry -> draft."""
-        state = _make_initial_state(
-            status="FAILED",
-            retry_count=0,
-        )
+    def test_validate_sar_missing_required_draft_triggers_retry(self):
+        state = _make_initial_state(status="IN_PROGRESS", detected_typology="STRUCTURING", retry_count=0)
         validated = validate_sar(state)
-        decision = should_retry(validated)
-        assert decision == "draft", f"Expected retry to 'draft', got '{decision}'"
+        assert should_retry(validated) == "draft"
 
     def test_should_retry_submit_on_pass(self):
         state = _make_initial_state(
@@ -261,21 +263,59 @@ class TestSARDraftingAndValidation:
 # Submit Node (v9.0: submit_result sets "COMPLETE")
 # ═══════════════════════════════════════════════════════════════════
 
-class TestSubmit:
-    def test_submit_sets_complete_status(self):
-        """v9.0: submit_result sets status to COMPLETE (uppercase)."""
-        state = _make_initial_state(status="IN_PROGRESS")
-        result = submit_result(state)
-        assert result["status"] == "COMPLETE", (
-            f"Expected COMPLETE, got {result['status']}"
+class TestSubmissionContracts:
+    def test_contract_failed_state_cannot_be_submitted(self, monkeypatch):
+        send = AsyncMock()
+        monkeypatch.setattr("tracer_agent.src.core.a2a_client.A2AClient.submit_result", send)
+        result = submit_result(_make_initial_state(status="FAILED", error_message="Invalid graph"))
+        assert result["status"] == "FAILED"
+        send.assert_not_called()
+
+    def test_contract_transport_failure_is_not_completion(self, monkeypatch):
+        monkeypatch.setattr(
+            "tracer_agent.src.core.a2a_client.A2AClient.submit_result",
+            AsyncMock(side_effect=RuntimeError("Unavailable")),
         )
+        result = submit_result(_make_initial_state(status="IN_PROGRESS", detected_typology="NONE"))
+        assert result["status"] == "FAILED"
+        assert result["error_message"]
+
+    def test_contract_required_missing_draft_fails(self):
+        result = validate_sar(_make_initial_state(status="IN_PROGRESS", detected_typology="STRUCTURING"))
+        assert result["validation_result"]["status"] == "FAILED"
+        assert result["validation_result"]["passed"] is False
+
+    def test_contract_skipped_validation_is_not_passed(self):
+        result = validate_sar(_make_initial_state(status="IN_PROGRESS", detected_typology="NONE"))
+        assert result["validation_result"]["status"] == "NOT_APPLICABLE"
+        assert result["validation_result"]["passed"] is False
+
+    def test_contract_failed_state_cannot_retry(self):
+        state = _make_initial_state(status="FAILED", validation_result={"passed": False}, retry_count=0)
+        assert should_retry(state) == "submit"
+
+    def test_contract_invalid_fallback_is_not_submitted(self, monkeypatch):
+        from tracer_agent.src.core.sar_drafter import SARValidation
+        send = AsyncMock()
+        monkeypatch.setattr("tracer_agent.src.core.a2a_client.A2AClient.submit_result", send)
+        monkeypatch.setattr(
+            "tracer_agent.src.core.sar_drafter.SARDrafter.validate_sar",
+            lambda *args: SARValidation(passed=False, errors=["Invalid evidence"]),
+        )
+        result = submit_result(_make_initial_state(status="IN_PROGRESS", detected_typology="STRUCTURING", confidence_score=0.8))
+        assert result["status"] == "FAILED"
+        send.assert_not_called()
+
+
+class TestSubmit:
+    def test_submit_sets_complete_only_after_acknowledgement(self):
+        state = _make_initial_state(status="IN_PROGRESS", detected_typology="NONE")
+        result = submit_result(state)
+        assert result["status"] == "COMPLETE"
 
     def test_submit_preserves_failed_state(self):
-        """submit_result catches exceptions and still returns COMPLETE."""
         state = _make_initial_state(status="FAILED")
-        result = submit_result(state)
-        # v9.0: submit_result always sets COMPLETE (even on error)
-        assert result["status"] == "COMPLETE"
+        assert submit_result(state)["status"] == "FAILED"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -287,28 +327,18 @@ class TestWorkflow:
         workflow = build_workflow()
         assert workflow is not None, "Workflow should compile successfully"
 
-    async def test_workflow_runs_with_none_graph(self):
-        """End-to-end: None graph_fragment -> FAILED status from analyze_graph,
-        then submit_result catches the error and returns COMPLETE."""
-        workflow = build_workflow()
-        initial = _make_initial_state()
-        result = await workflow.ainvoke(initial)
-        # v9.0: submit_result always returns COMPLETE (even after failures)
-        assert result["status"] == "COMPLETE", (
-            f"Expected COMPLETE, got {result['status']}"
-        )
+    async def test_workflow_preserves_graph_fetch_failure(self):
+        result = await build_workflow().ainvoke(_make_initial_state())
+        assert result["status"] == "FAILED"
+        assert result["error_message"]
 
     async def test_workflow_runs_with_valid_graph(self):
-        """End-to-end: Valid graph -> COMPLETE (no detection in unit test env)."""
-        workflow = build_workflow()
+        from decimal import Decimal
         fragment = {
-            "transactions": [{"id": "TX-1"}],
-            "nodes": {"a": {"id": "a"}},
-            "text_evidence": [],
-            "ground_truth_criminals": [],
+            "transactions": [{"id": "TX-1", "source_node": "a", "target_node": "b",
+                              "amount": Decimal("100"), "currency": "USD", "timestamp": 1700000000}],
+            "nodes": {"a": {"id": "a"}, "b": {"id": "b"}}, "text_evidence": [],
         }
-        initial = _make_initial_state(graph_fragment=fragment)
-        result = await workflow.ainvoke(initial)
-        assert result["status"] == "COMPLETE", (
-            f"Expected COMPLETE, got {result['status']}"
-        )
+        result = await build_workflow().ainvoke(_make_initial_state(graph_fragment=fragment))
+        assert result["status"] == "COMPLETE"
+        assert result["validation_result"]["status"] == "NOT_APPLICABLE"

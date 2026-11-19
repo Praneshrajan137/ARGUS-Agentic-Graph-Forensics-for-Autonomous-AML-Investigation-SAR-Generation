@@ -20,6 +20,8 @@ Tests cover:
 """
 import logging
 from decimal import Decimal
+from itertools import permutations
+from random import Random
 from unittest.mock import patch
 
 import pytest
@@ -461,3 +463,138 @@ class TestV8Enhancements:
         with patch.object(gr.graph, "add_edge"):
             with pytest.raises(ValueError, match="zero edges were loaded"):
                 gr.load_from_dict(data)
+
+
+def _coverage_event(tx_id, source="root", target="leaf"):
+    return {
+        "id": tx_id, "source_node": source, "target_node": target,
+        "amount": Decimal("9500"), "currency": "USD", "timestamp": 1700000000,
+    }
+
+
+def _coverage_reasoner(events):
+    reasoner = GraphReasoner()
+    reasoner.load_from_dict({"transactions": events})
+    return reasoner
+
+
+class TestStructuredCoverage:
+    def test_complete_coverage_is_per_instance_and_is_a_snapshot(self, monkeypatch):
+        from tracer_agent.src.core import graph_reasoner
+
+        monkeypatch.setattr(graph_reasoner, "MAX_NODE_DEGREE", 2)
+        limited = _coverage_reasoner([_coverage_event(str(i), target=f"leaf_{i}") for i in range(3)])
+        assert limited.coverage == {"status": "COMPLETE", "limitations": []}
+        assert limited.get_1hop_outgoing("root") == []
+        expected = {
+            "status": "PARTIAL",
+            "limitations": [{"reason": "MAX_NODE_DEGREE", "node": "root", "limit": 2}],
+        }
+        assert limited.coverage == expected
+        for _ in range(20):
+            limited.get_1hop_outgoing("root")
+            limited.get_1hop_incoming("root")
+            limited.dfs_trace_chains("root")
+        assert limited.coverage == expected  # no growing counters/duplicate entries
+        snapshot = limited.coverage
+        snapshot["limitations"][0]["node"] = "changed"
+        snapshot["limitations"].clear()
+        snapshot["status"] = "COMPLETE"
+        assert limited.coverage == expected
+        other = _coverage_reasoner([_coverage_event("only")])
+        assert other.coverage == {"status": "COMPLETE", "limitations": []}
+        limited.load_from_dict({"transactions": [_coverage_event("new")]})
+        assert limited.coverage == {"status": "COMPLETE", "limitations": []}
+
+    def test_degree_at_limit_is_complete(self, monkeypatch):
+        from tracer_agent.src.core import graph_reasoner
+
+        monkeypatch.setattr(graph_reasoner, "MAX_NODE_DEGREE", 2)
+        reasoner = _coverage_reasoner([_coverage_event("one"), _coverage_event("two")])
+        assert len(reasoner.get_1hop_outgoing("root")) == 2
+        assert len(reasoner.dfs_trace_chains("root")) == 2
+        assert reasoner.coverage == {"status": "COMPLETE", "limitations": []}
+
+    def test_intermediate_degree_limit_is_reported(self, monkeypatch):
+        from tracer_agent.src.core import graph_reasoner
+
+        monkeypatch.setattr(graph_reasoner, "MAX_NODE_DEGREE", 2)
+        reasoner = _coverage_reasoner([
+            _coverage_event("entry", "root", "hub"),
+            _coverage_event("out_a", "hub", "a"),
+            _coverage_event("out_b", "hub", "b"),
+        ])
+        assert len(reasoner.dfs_trace_chains("root")) == 1
+        assert reasoner.coverage == {
+            "status": "PARTIAL",
+            "limitations": [{"reason": "MAX_NODE_DEGREE", "node": "hub", "limit": 2}],
+        }
+
+    @pytest.mark.parametrize("event_count, status", [(2, "COMPLETE"), (3, "PARTIAL")])
+    def test_path_limit_only_marks_omitted_paths(self, monkeypatch, event_count, status):
+        from tracer_agent.src.core import graph_reasoner
+
+        monkeypatch.setattr(graph_reasoner, "MAX_PATHS_PER_SEARCH", 2)
+        events = [_coverage_event(f"event_{i}", target=f"leaf_{i}") for i in range(event_count)]
+        for seed in range(3):
+            Random(seed).shuffle(events)
+            reasoner = _coverage_reasoner(events)
+            for _ in range(3):
+                chains = reasoner.dfs_trace_chains("root")
+                assert [[tx["tx_id"] for tx in chain] for chain in chains] == [["event_0"], ["event_1"]]
+            limitations = ([{"reason": "MAX_PATHS_PER_SEARCH", "node": "root", "limit": 2}]
+                           if status == "PARTIAL" else [])
+            assert reasoner.coverage == {"status": status, "limitations": limitations}
+            reasoner.get_1hop_incoming("missing")
+            assert reasoner.coverage["status"] == status  # not reset by another search
+
+    def test_coverage_aggregates_degree_and_path_limits_deterministically(self, monkeypatch):
+        from tracer_agent.src.core import graph_reasoner
+
+        monkeypatch.setattr(graph_reasoner, "MAX_NODE_DEGREE", 3)
+        monkeypatch.setattr(graph_reasoner, "MAX_PATHS_PER_SEARCH", 1)
+        events = [
+            _coverage_event("root_a", "root", "a"),
+            _coverage_event("root_b", "root", "b"),
+        ] + [_coverage_event(f"hub_{i}", "hub", f"h{i}") for i in range(4)]
+        reasoner = _coverage_reasoner(events)
+        reasoner.dfs_trace_chains("root")
+        reasoner.get_1hop_outgoing("hub")
+        assert reasoner.coverage == {
+            "status": "PARTIAL",
+            "limitations": [
+                {"reason": "MAX_NODE_DEGREE", "node": "hub", "limit": 3},
+                {"reason": "MAX_PATHS_PER_SEARCH", "node": "root", "limit": 1},
+            ],
+        }
+
+
+@pytest.mark.parametrize("max_depth", [1, 2, 3, 4])
+def test_dfs_matches_independent_event_permutation_oracle(max_depth):
+    events = [
+        _coverage_event("a1", "A", "B"), _coverage_event("a2", "A", "B"),
+        _coverage_event("b", "B", "C"), _coverage_event("c", "C", "A"),
+        _coverage_event("d", "B", "D"), _coverage_event("loop", "B", "B"),
+        _coverage_event("e", "D", "E"),
+    ]
+    expected = set()
+    for length in range(1, max_depth + 1):
+        for chain in permutations(events, length):
+            if chain[0]["source_node"] != "A":
+                continue
+            if any(a["target_node"] != b["source_node"] for a, b in zip(chain, chain[1:])):
+                continue
+            nodes = ["A"] + [event["target_node"] for event in chain]
+            if len(set(nodes)) != len(nodes):
+                continue
+            can_extend = any(event["source_node"] == nodes[-1] and event["target_node"] not in nodes
+                             for event in events)
+            if length == max_depth or not can_extend:
+                expected.add(tuple(event["id"] for event in chain))
+    for seed in range(3):
+        shuffled = list(events)
+        Random(seed).shuffle(shuffled)
+        reasoner = _coverage_reasoner(shuffled)
+        chains = reasoner.dfs_trace_chains("A", max_depth)
+        actual = [tuple(tx["tx_id"] for tx in chain) for chain in chains]
+        assert actual == sorted(expected)

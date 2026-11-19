@@ -190,7 +190,7 @@ class TestInvestigationEndpoint:
         """
         no_raise_client = TestClient(app, raise_server_exceptions=False)
         with patch(
-            "src.core.a2a_server.json.loads",
+            "tracer_agent.src.core.a2a_server.json.loads",
             side_effect=KeyError("simulated bug"),
         ):
             response = no_raise_client.post(

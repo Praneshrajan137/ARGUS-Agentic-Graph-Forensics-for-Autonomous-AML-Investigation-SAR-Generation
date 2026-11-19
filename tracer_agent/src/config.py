@@ -164,16 +164,47 @@ PAN_REGEX = r"^[A-Z]{5}[0-9]{4}[A-Z]$"
 SWIFT_REGEX = r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$"
 IBAN_REGEX = r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,}$"
 
-# Amount extraction patterns for Evidence Synthesizer
-# v7.0: Added ₹ symbol and "Rs." prefix patterns for Indian text evidence
+# Monetary occurrences: full decimal precision, Western/Indian grouping,
+# optional magnitude, and compatible currency markers in the same source span.
+# Boundaries prevent salvaging a short number from a malformed monetary token.
+AMOUNT_NUMBER_PATTERN = (
+    r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,2}(?:,[0-9]{2})+,[0-9]{3}|[0-9]+)"
+    r"(?:\.[0-9]+)?"
+)
+AMOUNT_CURRENCY_PATTERN = r"(?:USD|INR|EUR|GBP|CAD|AUD|NZD|SGD|HKD)"
+AMOUNT_SCALE_PATTERN = r"(?:k|lakhs?|crores?)"
+AMOUNT_START_PATTERN = r"(?<![\w.,+\-$₹€£])"
+AMOUNT_END_PATTERN = r"(?!\w|[.,][\w.,]|[+\-][0-9])"
+# Unsupported space-grouped numbers, fractions and ratios must not yield
+# partial amounts on either side. Lookahead also finds overlapping fragments.
+AMOUNT_BROKEN_NUMBER_PATTERN = r"(?=([0-9](?:[, \t\u00a0\u202f]*[ \t\u00a0\u202f]|[/:])[0-9]))"
+AMOUNT_VALUE_PATTERN = (
+    rf"(?P<sign_after>[+\-])?(?P<number>{AMOUNT_NUMBER_PATTERN})"
+    rf"(?:\s*(?P<scale>{AMOUNT_SCALE_PATTERN})(?!\w))?"
+)
+AMOUNT_SUFFIX_PATTERN = rf"(?:\s*(?P<currency_after>{AMOUNT_CURRENCY_PATTERN})(?!\w))?"
 AMOUNT_PATTERNS: dict[str, str] = {
-    "usd_symbol": r"\$[\d,]+(?:\.\d{2})?",
-    "usd_k": r"\$(\d+)k\b",
-    "currency_code": r"([\d,]+)\s*(?:USD|INR|EUR|GBP)",
-    "inr_symbol": r"₹[\d,]+(?:\.\d{2})?",
-    "inr_rs_prefix": r"Rs\.?\s*[\d,]+(?:\.\d{2})?",
-    "inr_lakh": r"(\d+(?:\.\d+)?)\s*lakh",
-    "inr_crore": r"(\d+(?:\.\d+)?)\s*crore",
+    "symbol": (
+        rf"{AMOUNT_START_PATTERN}(?P<sign_before>[+\-])?"
+        rf"(?:(?P<currency_before>{AMOUNT_CURRENCY_PATTERN})\s*)?"
+        rf"(?P<symbol>[$₹€£]|Rs\.?)\s*"
+        rf"{AMOUNT_VALUE_PATTERN}{AMOUNT_SUFFIX_PATTERN}{AMOUNT_END_PATTERN}"
+    ),
+    "currency_prefix": (
+        rf"{AMOUNT_START_PATTERN}(?P<sign_before>[+\-])?"
+        rf"(?P<currency_before>{AMOUNT_CURRENCY_PATTERN})\s*"
+        rf"{AMOUNT_VALUE_PATTERN}{AMOUNT_SUFFIX_PATTERN}{AMOUNT_END_PATTERN}"
+    ),
+    "currency_suffix": (
+        rf"{AMOUNT_START_PATTERN}{AMOUNT_VALUE_PATTERN}\s*"
+        rf"(?P<currency_after>{AMOUNT_CURRENCY_PATTERN})(?!\w){AMOUNT_END_PATTERN}"
+    ),
+    "scaled": (
+        rf"{AMOUNT_START_PATTERN}(?P<sign_after>[+\-])?"
+        rf"(?P<number>{AMOUNT_NUMBER_PATTERN})\s*"
+        rf"(?P<scale>{AMOUNT_SCALE_PATTERN})(?!\w)"
+        rf"{AMOUNT_SUFFIX_PATTERN}{AMOUNT_END_PATTERN}"
+    ),
 }
 
 # Pre-compiled regex for hot-path performance (full-string VALIDATION mode)

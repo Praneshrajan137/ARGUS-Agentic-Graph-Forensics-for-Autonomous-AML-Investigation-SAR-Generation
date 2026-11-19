@@ -17,7 +17,10 @@ Tests cover:
   - v8.0: Mixed currency isolation (Rule 14)
 """
 from decimal import Decimal
+from itertools import combinations
+from random import Random
 
+import pytest
 
 from tracer_agent.src.core.graph_reasoner import GraphReasoner
 from tracer_agent.src.core.heuristics.structuring import detect_structuring
@@ -393,3 +396,197 @@ class TestMixedCurrency:
             assert tx["currency"] == "INR", (
                 f"Non-INR transaction {tx['tx_id']} found in INR detection result"
             )
+
+
+# All-history regressions and an exhaustive small-fixture oracle.
+def _window_event(index, timestamp, *, direction="FAN_IN", currency="USD", amount="9500"):
+    source, target = f"peer_{index}", "hub"
+    if direction == "FAN_OUT":
+        source, target = target, source
+    return {
+        "id": f"event_{index:03d}",
+        "source_node": source,
+        "target_node": target,
+        "amount": Decimal(amount),
+        "currency": currency,
+        "timestamp": 1700000000 + timestamp,
+    }
+
+
+def _ids(result):
+    return tuple(tx["tx_id"] for tx in result.qualifying_transactions)
+
+
+def _brute_force_windows(events, min_count, window):
+    """Enumerate subsets, not sliding pointers or the production helpers."""
+    eligible = [
+        event for event in events
+        if event["currency"] == "USD"
+        and Decimal("9000") <= event["amount"] <= Decimal("9800")
+    ]
+    candidates = set()
+    for count in range(min_count, len(eligible) + 1):
+        for group in combinations(eligible, count):
+            times = [event["timestamp"] for event in group]
+            if max(times) - min(times) <= window:
+                candidates.add(frozenset(event["id"] for event in group))
+    return {
+        tuple(sorted(candidate)) for candidate in candidates
+        if not any(candidate < other for other in candidates)
+    }
+
+
+class TestAllHistoryWindows:
+    def test_earlier_cluster_survives_later_qualifying_noise(self):
+        events = [_window_event(i, i * 60) for i in range(STRUCTURING_MIN_COUNT)]
+        events.append(_window_event(99, 10 * 86400))
+        result = detect_structuring(_load({"transactions": events}), "hub")
+        assert result.detected
+        assert _ids(result) == tuple(event["id"] for event in events[:-1])
+        assert result.total_amount == Decimal("9500") * STRUCTURING_MIN_COUNT
+        assert result.window_start == events[0]["timestamp"]
+        assert result.window_end == events[-2]["timestamp"]
+
+    def test_disjoint_clusters_and_both_directions_are_returned(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_patterns
+
+        events = []
+        for cluster in range(2):
+            for direction in ("FAN_IN", "FAN_OUT"):
+                for i in range(STRUCTURING_MIN_COUNT):
+                    events.append(_window_event(
+                        len(events), cluster * 10 * 86400 + i * 60, direction=direction,
+                    ))
+        expected = find_structuring_patterns(_load({"transactions": events}), "hub")
+        assert len(expected) == 4
+        assert [(r.window_start, r.mode) for r in expected] == sorted(
+            (r.window_start, r.mode) for r in expected
+        )
+        assert {r.mode for r in expected} == {"FAN_IN", "FAN_OUT"}
+        assert all(r.transaction_count == STRUCTURING_MIN_COUNT for r in expected)
+        for seed in range(4):
+            shuffled = list(events)
+            Random(seed).shuffle(shuffled)
+            actual = find_structuring_patterns(_load({"transactions": shuffled}), "hub")
+            assert actual == expected
+        single = detect_structuring(_load({"transactions": events}), "hub")
+        assert single == expected[0]  # stable earliest fan-in tie-break
+
+    def test_single_result_chooses_strongest_window_not_latest_or_first_direction(self):
+        events = [_window_event(i, i) for i in range(STRUCTURING_MIN_COUNT)]
+        events += [
+            _window_event(100 + i, 10 * 86400 + i, direction="FAN_OUT")
+            for i in range(STRUCTURING_MIN_COUNT * 2)
+        ]
+        result = detect_structuring(_load({"transactions": events}), "hub")
+        assert result.mode == "FAN_OUT"
+        assert result.transaction_count == STRUCTURING_MIN_COUNT * 2
+        assert all(tx["timestamp"] >= 1700000000 + 10 * 86400
+                   for tx in result.qualifying_transactions)
+
+    def test_preselected_cash_uses_same_windows_without_fabricated_diversity(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_windows
+
+        events = [_window_event(i, i, amount="9500.01") for i in range(STRUCTURING_MIN_COUNT)]
+        known = find_structuring_windows(events, "hub")
+        cash = []
+        for i, event in enumerate(events):
+            event = dict(event, type="CASH_DEPOSIT")
+            event.pop("source_node")
+            if i % 3 == 1:
+                event["source_node"] = None
+            elif i % 3 == 2:
+                event["source_node"] = " "
+            cash.append(event)
+        cash.append(dict(cash[0]))  # same event twice is not another deposit
+        result, = find_structuring_windows(cash, "hub")
+        assert result.counterpart_nodes == []
+        assert result.transaction_count == STRUCTURING_MIN_COUNT
+        assert result.total_amount == Decimal("9500.01") * STRUCTURING_MIN_COUNT
+        assert _ids(result) == _ids(known[0])
+        assert result.confidence == known[0].confidence - Decimal("0.3")
+        assert all("tx_id" not in event for event in cash)  # caller input untouched
+
+    def test_preselected_duplicate_ids_follow_graph_first_occurrence_policy(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_windows
+
+        events = [_window_event(i, i) for i in range(STRUCTURING_MIN_COUNT)]
+        # A duplicate USD version must not revive an ID already loaded as INR.
+        events.insert(0, dict(events[0], currency="INR"))
+        assert not detect_structuring(_load({"transactions": events}), "hub").detected
+        assert find_structuring_windows(events, "hub") == []
+
+    @pytest.mark.parametrize("changes, error", [
+        ({"amount": 9500.0}, TypeError),
+        ({"amount": Decimal("NaN")}, ValueError),
+        ({"id": ""}, ValueError),
+    ])
+    def test_preselected_events_preserve_decimal_and_identity_guards(self, changes, error):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_windows
+
+        with pytest.raises(error):
+            find_structuring_windows([dict(_window_event(0, 0), **changes)], "hub")
+
+    def test_repeated_parallel_amounts_remain_distinct_events(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_patterns
+
+        events = [dict(_window_event(i, 0), source_node="same_peer")
+                  for i in range(STRUCTURING_MIN_COUNT)]
+        result, = find_structuring_patterns(_load({"transactions": events}), "hub")
+        assert result.transaction_count == STRUCTURING_MIN_COUNT
+        assert len(_ids(result)) == len(set(_ids(result)))
+        assert result.counterpart_nodes == ["same_peer"]
+
+    def test_currency_isolation_cannot_combine_subthreshold_counts(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_patterns
+
+        events = [_window_event(i, i, currency="USD" if i % 2 else "INR")
+                  for i in range(STRUCTURING_MIN_COUNT)]
+        reasoner = _load({"transactions": events})
+        assert find_structuring_patterns(reasoner, "hub", "USD") == []
+        assert find_structuring_patterns(reasoner, "hub", "INR") == []
+
+    @pytest.mark.parametrize("times", [
+        [0, 0, 0, 0, 0, 0], [0, 1, 8, 9, 16, 17], [0, 0, 8, 9, 9, 17],
+        [0, 1, 2, 20, 21, 22], [0, 9, 18, 27, 36, 45],
+    ])
+    def test_shared_windows_match_exhaustive_subset_oracle(self, monkeypatch, times):
+        from tracer_agent.src.core.heuristics import structuring
+
+        monkeypatch.setattr(structuring, "STRUCTURING_MIN_COUNT", 3)
+        monkeypatch.setattr(structuring, "STRUCTURING_TIME_WINDOW_SECONDS", 8)
+        events = [_window_event(i, timestamp) for i, timestamp in enumerate(times)]
+        expected = _brute_force_windows(events, 3, 8)
+        for seed in range(3):
+            shuffled = list(events)
+            Random(seed).shuffle(shuffled)
+            results = structuring.find_structuring_windows(shuffled, "hub")
+            assert {_ids(result) for result in results} == expected
+            assert len(results) == len(expected) <= len(events)
+            for result in results:
+                timestamps = [tx["timestamp"] for tx in result.qualifying_transactions]
+                assert (result.window_start, result.window_end) == (min(timestamps), max(timestamps))
+                assert result.window_end - result.window_start <= 8
+
+    def test_seeded_small_windows_match_independent_oracle(self, monkeypatch):
+        from tracer_agent.src.core.heuristics import structuring
+
+        monkeypatch.setattr(structuring, "STRUCTURING_MIN_COUNT", 3)
+        monkeypatch.setattr(structuring, "STRUCTURING_TIME_WINDOW_SECONDS", 8)
+        rng = Random(719)
+        for _ in range(30):
+            events = [
+                _window_event(i, rng.randrange(25), currency=rng.choice(["USD", "USD", "INR"]),
+                              amount=rng.choice(["8999.99", "9000", "9500.01", "9800", "9800.01"]))
+                for i in range(8)
+            ]
+            rng.shuffle(events)
+            results = structuring.find_structuring_windows(events, "hub")
+            assert {_ids(result) for result in results} == _brute_force_windows(events, 3, 8)
+
+    def test_dense_window_output_is_not_combinatorial(self):
+        from tracer_agent.src.core.heuristics.structuring import find_structuring_windows
+
+        results = find_structuring_windows([_window_event(i, i) for i in range(200)], "hub")
+        assert len(results) == 1
+        assert results[0].transaction_count == 200

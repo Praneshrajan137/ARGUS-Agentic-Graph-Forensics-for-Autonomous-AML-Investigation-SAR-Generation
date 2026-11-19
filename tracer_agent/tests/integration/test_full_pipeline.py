@@ -153,13 +153,14 @@ class TestConfidenceFormula:
     v9.0 [P5v9-05]: Positive matching evidence boost test added.
     """
 
-    def _make_state(self, typology="STRUCTURING", verdict="CORROBORATED", discrepancies=None):
+    def _make_state(self, typology="STRUCTURING", verdict="MATCH", discrepancies=None, checked_count=1):
         """Helper to construct a minimal InvestigationState for confidence tests."""
         return {
             "case_id": "TEST-CONF", "subject_id": "S1", "jurisdiction": "fincen",
             "hop_depth": 3, "graph_fragment": None, "detected_typology": typology,
             "detection_results": {}, "evidence_package": {
                 "verdict": verdict,
+                "checked_count": checked_count,
                 "discrepancies": discrepancies or [],
             },
             "sar_narrative": None, "sar_draft": None, "validation_result": None,
@@ -169,40 +170,42 @@ class TestConfidenceFormula:
         }
 
     def test_confidence_formula_single_typology_with_evidence(self):
-        """Single typology + corroborating evidence → 0.3 + 0.2 = 0.5 (passes gate)."""
+        """Single typology + checked MATCH evidence → 0.3 + 0.2 = 0.5 (passes gate)."""
         from tracer_agent.src.core.decision_loop import compute_confidence
         from tracer_agent.src.config import CONFIDENCE_THRESHOLD
 
-        state = self._make_state(typology="STRUCTURING", verdict="CORROBORATED")
+        state = self._make_state(typology="STRUCTURING", verdict="MATCH", checked_count=1)
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.5
         assert result["confidence_score"] >= float(CONFIDENCE_THRESHOLD)
         assert result["detected_typology"] == "STRUCTURING"
 
     def test_confidence_formula_single_typology_no_evidence(self):
-        """Single typology without evidence → 0.3 (below threshold → NONE)."""
-        from tracer_agent.src.core.decision_loop import compute_confidence
+        """Single typology without evidence → 0.3 (below gate, but preserves detected typology)."""
+        from tracer_agent.src.core.decision_loop import compute_confidence, should_generate_sar
 
-        state = self._make_state(typology="LAYERING", verdict="INSUFFICIENT_DATA")
+        state = self._make_state(typology="LAYERING", verdict="INSUFFICIENT_DATA", checked_count=0)
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.3
-        assert result["detected_typology"] == "NONE"
+        # Intentional safety contract: low score skips auto-drafting without erasing findings.
+        assert result["detected_typology"] == "LAYERING"
+        assert should_generate_sar(result) == "submit"
 
     def test_confidence_formula_both_typologies(self):
         """BOTH typologies → base 0.6 (passes gate without evidence)."""
         from tracer_agent.src.core.decision_loop import compute_confidence
 
-        state = self._make_state(typology="BOTH", verdict="NOT_APPLICABLE")
+        state = self._make_state(typology="BOTH", verdict="NOT_APPLICABLE", checked_count=0)
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.6
         assert result["detected_typology"] == "BOTH"
 
     def test_confidence_formula_max_score(self):
-        """BOTH + evidence + discrepancy → 0.6 + 0.2 + 0.2 = 1.0."""
+        """BOTH + checked MATCH evidence + discrepancy → 0.6 + 0.2 + 0.2 = 1.0."""
         from tracer_agent.src.core.decision_loop import compute_confidence
 
         state = self._make_state(
-            typology="BOTH", verdict="CORROBORATED",
+            typology="BOTH", verdict="MATCH", checked_count=1,
             discrepancies=["text says $15000, ledger shows $9500"],
         )
         result = compute_confidence(state)
@@ -219,16 +222,13 @@ class TestConfidenceFormula:
         assert 0.6 + 0.2 + 0.2 == 1.0
 
     def test_low_confidence_skips_sar(self):
-        """v9.0 [P5v9-04]: Low confidence → should_generate_sar returns "submit".
-        v8.0 listed this test in spec but did NOT implement it.
-        Tests the conditional edge path compute_confidence → submit.
-        """
+        """Low confidence routes to submit without erasing the detected typology."""
         from tracer_agent.src.core.decision_loop import compute_confidence, should_generate_sar
 
-        state = self._make_state(typology="STRUCTURING", verdict="INSUFFICIENT_DATA")
+        state = self._make_state(typology="STRUCTURING", verdict="INSUFFICIENT_DATA", checked_count=0)
         result = compute_confidence(state)
         assert result["confidence_score"] == 0.3
-        assert result["detected_typology"] == "NONE"
+        assert result["detected_typology"] == "STRUCTURING"
 
         edge = should_generate_sar(result)
         assert edge == "submit", f"Expected 'submit' for low confidence, got '{edge}'"
@@ -237,7 +237,7 @@ class TestConfidenceFormula:
         """Complement of low confidence: high confidence → should_generate_sar returns "draft"."""
         from tracer_agent.src.core.decision_loop import compute_confidence, should_generate_sar
 
-        state = self._make_state(typology="BOTH", verdict="CORROBORATED")
+        state = self._make_state(typology="BOTH", verdict="MATCH", checked_count=1)
         result = compute_confidence(state)
         assert result["confidence_score"] >= 0.5
 
@@ -245,18 +245,22 @@ class TestConfidenceFormula:
         assert edge == "draft", f"Expected 'draft' for high confidence, got '{edge}'"
 
     def test_evidence_boost_requires_corroboration(self):
-        """v9.0 [P5v9-05]: Malformed/empty verdict does NOT trigger evidence boost."""
+        """Only an explicitly checked MATCH verdict triggers the evidence boost."""
         from tracer_agent.src.core.decision_loop import compute_confidence
 
-        state_empty = self._make_state(typology="STRUCTURING", verdict="")
+        state_empty = self._make_state(typology="STRUCTURING", verdict="", checked_count=1)
         result_empty = compute_confidence(state_empty)
         assert result_empty["confidence_score"] == 0.3
 
-        state_typo = self._make_state(typology="STRUCTURING", verdict="COROBORATED")
-        result_typo = compute_confidence(state_typo)
-        assert result_typo["confidence_score"] == 0.3
+        state_legacy = self._make_state(typology="STRUCTURING", verdict="CORROBORATED", checked_count=1)
+        result_legacy = compute_confidence(state_legacy)
+        assert result_legacy["confidence_score"] == 0.3
 
-        state_valid = self._make_state(typology="STRUCTURING", verdict="CORROBORATED")
+        state_unchecked = self._make_state(typology="STRUCTURING", verdict="MATCH", checked_count=0)
+        result_unchecked = compute_confidence(state_unchecked)
+        assert result_unchecked["confidence_score"] == 0.3
+
+        state_valid = self._make_state(typology="STRUCTURING", verdict="MATCH", checked_count=1)
         result_valid = compute_confidence(state_valid)
         assert result_valid["confidence_score"] == 0.5
 
